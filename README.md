@@ -55,7 +55,6 @@ Project Overall Note:
 - Keys need to be set up (there may be more than this, please suggest all the keys needed for set up but for follow in each stage): 
 + HF access token: to retrieve llama model
 + AWS access key + secret access key 
-+ Docker hub token
 + ECR
 
 Requirements:

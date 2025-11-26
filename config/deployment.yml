@@ -1,0 +1,38 @@
+# Deployment Configuration for Stage 1
+# All values are stored in AWS SSM Parameter Store for maximum flexibility
+# This file maps configuration keys to SSM parameter paths
+
+aws:
+  region: /slm-ft-serving/aws/region
+  
+ec2:
+  instance_id: /slm-ft-serving/ec2/instance-id
+  instance_type: /slm-ft-serving/ec2/instance-type
+  
+ecr:
+  repository_name: /slm-ft-serving/ecr/repository-name
+  # ECR registry will be dynamically constructed from account_id and region
+
+secrets:
+  # HuggingFace token stored in Secrets Manager, referenced via SSM parameter
+  hf_token: /slm-ft-serving/secrets/hf-token
+
+model:
+  base_model: /slm-ft-serving/model/base-model
+  adapter_model: /slm-ft-serving/model/adapter-model
+
+vllm:
+  api_port: /slm-ft-serving/vllm/api-port
+  tensor_parallel_size: /slm-ft-serving/vllm/tensor-parallel-size
+  
+cloudwatch:
+  log_group_ssm: /slm-ft-serving/cloudwatch/log-group-ssm
+  log_group_deployment: /slm-ft-serving/cloudwatch/log-group-deployment
+  
+deployment:
+  max_retries: /slm-ft-serving/deployment/max-retries
+  retry_delay_seconds: /slm-ft-serving/deployment/retry-delay-seconds
+  ec2_start_timeout_seconds: /slm-ft-serving/deployment/ec2-start-timeout
+  ssm_command_timeout_seconds: /slm-ft-serving/deployment/ssm-command-timeout
+  health_check_timeout_seconds: /slm-ft-serving/deployment/health-check-timeout
+  health_check_interval_seconds: /slm-ft-serving/deployment/health-check-interval
