@@ -342,7 +342,7 @@ Go back to **IAM → Roles → slm-ft-serving-ec2-role**
 
 ### 6.1 Automated Setup (Recommended)
 
-Use the setup script provided in `docs/ssm-parameters.md`:
+Use the setup script provided in `docs/SSM-PARAMETERS.md`:
 
 1. Ensure AWS CLI is configured with your credentials
 2. Run the setup script:
@@ -355,11 +355,11 @@ chmod +x scripts/setup-ssm-parameters.sh
 
 ### 6.2 Manual Setup via Console
 
-If you prefer using the AWS Console:
+**Only 3 parameters need to be stored in Parameter Store:**
 
 1. Go to **Systems Manager Console**: https://console.aws.amazon.com/systems-manager/
 2. Click **Parameter Store** in left sidebar
-3. For each parameter below, click **Create parameter**:
+3. Create these 3 parameters:
 
 **Parameter 1: AWS Region**
 - **Name**: `/slm-ft-serving/aws/region`
@@ -370,83 +370,17 @@ If you prefer using the AWS Console:
 **Parameter 2: EC2 Instance ID** (create after step 7.7)
 - **Name**: `/slm-ft-serving/ec2/instance-id`
 - **Type**: String
-- **Value**: `i-XXXXXXXXXXXXX` (your actual instance ID)
+- **Value**: `i-XXXXXXXXXXXXX` (your actual instance ID from step 7.3)
+- Click **Create parameter**
 
-**Parameter 3: EC2 Instance Type**
-- **Name**: `/slm-ft-serving/ec2/instance-type`
-- **Type**: String
-- **Value**: `g6.2xlarge`
-
-**Parameter 4: ECR Repository Name**
-- **Name**: `/slm-ft-serving/ecr/repository-name`
-- **Type**: String
-- **Value**: `slm-ft-serving-vllm`
-
-**Parameter 5: HF Token Reference**
+**Parameter 3: HF Token Reference**
 - **Name**: `/slm-ft-serving/secrets/hf-token`
 - **Type**: String
 - **Value**: `{{resolve:secretsmanager:slm-ft-serving/hf-token}}`
-- This creates a reference to the Secrets Manager secret
+- **Description**: Reference to Secrets Manager secret for HuggingFace token
+- Click **Create parameter**
 
-**Parameter 6: Base Model**
-- **Name**: `/slm-ft-serving/model/base-model`
-- **Type**: String
-- **Value**: `meta-llama/Llama-3.1-8B`
-
-**Parameter 7: Adapter Model**
-- **Name**: `/slm-ft-serving/model/adapter-model`
-- **Type**: String
-- **Value**: `loghoag/llama-3.1-8b-medical-ie`
-
-**Parameter 8: vLLM API Port**
-- **Name**: `/slm-ft-serving/vllm/api-port`
-- **Type**: String
-- **Value**: `8000`
-
-**Parameter 9: Tensor Parallel Size**
-- **Name**: `/slm-ft-serving/vllm/tensor-parallel-size`
-- **Type**: String
-- **Value**: `1`
-
-**Parameter 10: CloudWatch SSM Log Group**
-- **Name**: `/slm-ft-serving/cloudwatch/log-group-ssm`
-- **Type**: String
-- **Value**: `/aws/ssm/slm-ft-serving/commands`
-
-**Parameter 11: CloudWatch Deployment Log Group**
-- **Name**: `/slm-ft-serving/cloudwatch/log-group-deployment`
-- **Type**: String
-- **Value**: `/aws/deployment/slm-ft-serving`
-
-**Parameter 12: Max Retries**
-- **Name**: `/slm-ft-serving/deployment/max-retries`
-- **Type**: String
-- **Value**: `3`
-
-**Parameter 13: Retry Delay**
-- **Name**: `/slm-ft-serving/deployment/retry-delay-seconds`
-- **Type**: String
-- **Value**: `10`
-
-**Parameter 14: EC2 Start Timeout**
-- **Name**: `/slm-ft-serving/deployment/ec2-start-timeout`
-- **Type**: String
-- **Value**: `300`
-
-**Parameter 15: SSM Command Timeout**
-- **Name**: `/slm-ft-serving/deployment/ssm-command-timeout`
-- **Type**: String
-- **Value**: `600`
-
-**Parameter 16: Health Check Timeout**
-- **Name**: `/slm-ft-serving/deployment/health-check-timeout`
-- **Type**: String
-- **Value**: `120`
-
-**Parameter 17: Health Check Interval**
-- **Name**: `/slm-ft-serving/deployment/health-check-interval`
-- **Type**: String
-- **Value**: `10`
+> **Note**: All other configuration values (model paths, ports, timeouts) are defined as defaults in `config/deployment.yml` and don't need to be stored in Parameter Store.
 
 ---
 
@@ -660,7 +594,7 @@ Before running your first deployment, verify all services are set up:
 - [ ] Secret value verified
 
 ### AWS Parameter Store
-- [ ] All 17 parameters created under `/slm-ft-serving/` namespace
+- [ ] All 3 parameters created under `/slm-ft-serving/` namespace
 - [ ] Instance ID parameter updated with actual value
 - [ ] HF token reference parameter points to Secrets Manager
 
