@@ -376,9 +376,11 @@ chmod +x scripts/setup-ssm-parameters.sh
 **Parameter 3: HF Token Reference**
 - **Name**: `/slm-ft-serving/secrets/hf-token`
 - **Type**: String
-- **Value**: `{{resolve:secretsmanager:slm-ft-serving/hf-token}}`
-- **Description**: Reference to Secrets Manager secret for HuggingFace token
+- **Value**: `slm-ft-serving/hf-token`
+- **Description**: Secrets Manager secret name for HuggingFace token
 - Click **Create parameter**
+
+> **Note**: Store only the secret name, not the `{{resolve:}}` syntax. Your deployment script will use boto3 to retrieve the actual token from Secrets Manager using this name.
 
 > **Note**: All other configuration values (model paths, ports, timeouts) are defined as defaults in `config/deployment.yml` and don't need to be stored in Parameter Store.
 
