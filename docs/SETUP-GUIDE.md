@@ -77,7 +77,6 @@ This guide walks through setting up all required AWS services and external accou
 1. Search and select these AWS managed policies:
    - ✅ `AmazonSSMManagedInstanceCore` (for SSM Session Manager)
    - ✅ `AmazonEC2ContainerRegistryReadOnly` (for pulling images from ECR)
-   - ✅ `CloudWatchLogsFullAccess` (for writing logs to CloudWatch)
 2. Click **Next**
 
 **Step 3: Name and Create**
@@ -89,7 +88,10 @@ This guide walks through setting up all required AWS services and external accou
 
 Go back to **IAM → Roles → slm-ft-serving-ec2-role**
 
-**Why custom policies?** We need fine-grained access to specific resources (your secrets, parameters) that AWS managed policies don't provide.
+**Why custom policies instead of AWS managed policies?**
+- `SecretsManagerReadWrite` gives access to ALL secrets in your account (security risk)
+- `CloudWatchLogsFullAccess` allows creating/deleting any log group (too permissive)
+- Custom policies scope access only to your project's specific resources
 
 **Policy 1: Secrets Manager & Parameter Store Access**
 1. Click **Add permissions** → **Create inline policy**
@@ -124,9 +126,35 @@ Go back to **IAM → Roles → slm-ft-serving-ec2-role**
 5. **Policy name**: `SecretsAndParameterStorePolicy`
 6. Click **Create policy**
 
+**Policy 2: CloudWatch Logs Access**
+1. Click **Add permissions** → **Create inline policy**
+2. Click **JSON** tab
+3. Paste this policy:
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CloudWatchLogsAccess",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogStreams"
+      ],
+      "Resource": "arn:aws:logs:us-east-1:*:log-group:/aws/ssm/slm-ft-serving/*"
+    }
+  ]
+}
+```
+4. Click **Next**
+5. **Policy name**: `CloudWatchLogsPolicy`
+6. Click **Create policy**
+
 **Summary of EC2 Role Policies:**
-- ✅ 3 AWS Managed Policies (SSM, ECR, CloudWatch)
-- ✅ 1 Custom Inline Policy (Secrets/Parameters - scoped to your resources)
+- ✅ 2 AWS Managed Policies (SSM, ECR ReadOnly)
+- ✅ 2 Custom Inline Policies (Secrets/Parameters + CloudWatch Logs - scoped to your resources)
 
 ### 3.2 Create IAM User for Local Deployment Script
 
@@ -185,6 +213,20 @@ Go back to **IAM → Roles → slm-ft-serving-ec2-role**
         "secretsmanager:GetSecretValue"
       ],
       "Resource": "arn:aws:secretsmanager:us-east-1:ACCOUNT_ID:secret:slm-ft-serving/*"
+    },
+    {
+      "Sid": "CloudWatchLogsReadAccess",
+      "Effect": "Allow",
+      "Action": [
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams",
+        "logs:GetLogEvents",
+        "logs:FilterLogEvents"
+      ],
+      "Resource": [
+        "arn:aws:logs:us-east-1:ACCOUNT_ID:log-group:/aws/ssm/slm-ft-serving/*",
+        "arn:aws:logs:us-east-1:ACCOUNT_ID:log-group:/aws/deployment/slm-ft-serving/*"
+      ]
     }
   ]
 }
@@ -201,7 +243,7 @@ Go back to **IAM → Roles → slm-ft-serving-ec2-role**
 
 **Summary of Deployer User Policies:**
 - ✅ 2 AWS Managed Policies (EC2 ReadOnly, SSM ReadOnly)
-- ✅ 1 Custom Policy (EC2 start/stop, SSM commands, secrets access)
+- ✅ 1 Custom Policy (EC2 start/stop, SSM commands, secrets access, CloudWatch Logs read)
 
 **Step 3: Create Access Keys**
 1. Go to **IAM → Users → slm-ft-serving-deployer**
@@ -257,10 +299,12 @@ Go back to **IAM → Roles → slm-ft-serving-ec2-role**
 3. Click **Create rule**
 4. Configure rule:
    - **Rule priority**: 1
-   - **Rule description**: `Keep last 10 images`
+   - **Rule description**: `Keep last 2 images`
    - **Image status**: Any
    - **Match criteria**: Image count more than
-   - **Count number**: 10
+   - **Image count**: 2
+   - **Image count before action**: Specify maximum images to not perform action on
+   - **Rule action**: Expire (deletes the image)
 5. Click **Save**
 
 ### 4.3 Note Repository URI
@@ -590,8 +634,8 @@ Before running your first deployment, verify all services are set up:
 
 ### AWS IAM
 - [ ] EC2 IAM role `slm-ft-serving-ec2-role` created with:
-  - [ ] 3 AWS managed policies (SSM, ECR ReadOnly, CloudWatch)
-  - [ ] 1 custom inline policy (Secrets/Parameters)
+  - [ ] 2 AWS managed policies (SSM, ECR ReadOnly)
+  - [ ] 2 custom inline policies (Secrets/Parameters + CloudWatch Logs)
 - [ ] IAM user `slm-ft-serving-deployer` created with:
   - [ ] 2 AWS managed policies (EC2 ReadOnly, SSM ReadOnly)
   - [ ] 1 custom policy (EC2 start/stop, SSM commands)
