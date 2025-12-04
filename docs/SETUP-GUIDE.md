@@ -468,9 +468,15 @@ If you prefer using the AWS Console:
 **Application and OS Images (AMI)**
 1. Click **Browse more AMIs**
 2. Click **AWS Marketplace AMIs** tab
-3. Search for: `Deep Learning AMI GPU PyTorch`
-4. Select: **Deep Learning AMI GPU PyTorch 2.x (Ubuntu 22.04)**
-5. Click **Select** and accept terms
+3. Search for: `Deep Learning Base AMI`
+4. Select: **Deep Learning Base AMI with Single CUDA (Ubuntu 22.04)** - 64-bit (x86)
+5. Click **Select** and accept terms if prompted
+
+> **Why this AMI?** Best balance of stability and performance:
+> - **Ubuntu 22.04 LTS**: Mature, stable, long-term support (vs. new 24.04 or Amazon Linux)
+> - **Single CUDA**: Optimized NVIDIA drivers for 1 GPU (perfect for g6.2xlarge)
+> - **Minimal bloat**: Base AMI without pre-installed frameworks, giving vLLM clean environment
+> - **Production-ready**: Widely used, excellent documentation and community support
 
 **Instance type**
 - Click **Compare instance types**
