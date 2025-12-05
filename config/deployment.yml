@@ -25,6 +25,13 @@ vllm:
   api_port: 8000
   tensor_parallel_size: 1  # g6.2xlarge has 1 GPU
   
+docker:
+  container_name: vllm-server
+  # Named volume persists models on EBS across container recreations
+  volume_name: huggingface-cache
+  # Mount point inside container where vLLM caches models
+  cache_mount_path: /root/.cache/huggingface
+  
 cloudwatch:
   log_group_ssm: /aws/ssm/slm-ft-serving/commands
   log_group_deployment: /aws/deployment/slm-ft-serving
