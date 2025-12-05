@@ -1,0 +1,51 @@
+# Git
+.git/
+.gitignore
+.github/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Poetry
+poetry.lock
+
+# Documentation
+docs/
+*.md
+LICENSE
+
+# Configuration (deployed via SSM, not baked into image)
+config/
+
+# Scripts (run locally, not in container)
+scripts/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
