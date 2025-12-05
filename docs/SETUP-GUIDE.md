@@ -486,32 +486,32 @@ chmod +x scripts/setup-ssm-parameters.sh
 6. Click **Next** → **Save changes**
 
 ### 7.7 Configure EC2 Instance (One-time Setup)
-This step is optional but recommended to reduce cold start times:
+This step is optional but recommended to verify the environment:
 
 1. Connect to instance via Session Manager (EC2 Console → Connect → Session Manager)
-2. Run these commands:
+2. Run these commands to verify the environment:
 ```bash
-# Update system
-sudo apt update && sudo apt upgrade -y
+# Check system info
+cat /etc/os-release
 
-# Install Docker if not present
-sudo apt install -y docker.io
-sudo systemctl enable docker
-sudo systemctl start docker
-sudo usermod -aG docker ubuntu
-
-# Install AWS CLI v2 (if not present)
-sudo apt install -y awscli
-
-# Verify installations
+# Verify Docker is installed and running
 docker --version
-aws --version
-nvidia-smi  # Should show NVIDIA L4 GPU
+sudo systemctl status docker
 
-# Pre-pull vLLM base image (optional, saves time on first deploy)
-docker pull vllm/vllm-openai:latest
+# Verify AWS CLI
+aws --version
+
+# Verify NVIDIA GPU and drivers
+nvidia-smi  # Should show NVIDIA L4 GPU with CUDA version
+
+# Optional: Pre-pull vLLM base image (saves time on first deploy)
+# Note: This is ~15-20GB and takes several minutes
+sudo docker pull vllm/vllm-openai:latest
 ```
-3. Exit the session
+
+3. Exit the session when done
+
+> **Note**: You may see warnings about `needrestart` or duplicate apt sources during system updates - these are harmless and can be ignored. The Deep Learning AMI comes pre-configured with Docker, NVIDIA drivers, and AWS CLI, so manual installation is not needed.
 
 ---
 
@@ -519,7 +519,7 @@ docker pull vllm/vllm-openai:latest
 
 ### 8.1 Create Log Groups
 1. Go to **CloudWatch Console**: https://console.aws.amazon.com/cloudwatch/
-2. Click **Log groups** in left sidebar
+2. Click **Log Management (new update)** in left sidebar
 
 **Log Group 1: SSM Commands**
 1. Click **Create log group**
@@ -537,10 +537,16 @@ docker pull vllm/vllm-openai:latest
 1. Go to **Systems Manager → Session Manager**
 2. Click **Preferences** tab
 3. Click **Edit**
-4. Scroll to **CloudWatch logs**:
-   - **Enable**: ✅ Enable CloudWatch logging
-   - **Log group name**: `/aws/ssm/slm-ft-serving/commands`
+4. Scroll to **CloudWatch logs** section:
+   - **Enable**: ✅ Check **Enable CloudWatch logging**
+   - **Logging option**: Select **Stream session logs (Recommended)**
+     - This streams data continuously in JSON format for real-time monitoring
+   - **Enforce encryption**: Leave unchecked (optional - check if you need CMK encryption)
+   - **Log group name**: Enter `/aws/ssm/slm-ft-serving/commands`
+     - Or click **Find Log Groups** and select it from the list
 5. Click **Save**
+
+> **Note**: This configures logging for interactive Session Manager sessions (manual `aws ssm start-session` connections). Your deployment script's `send_command()` API calls have built-in output retrieval and work without this setup. However, enabling CloudWatch logging is best practice for audit trails, long-term retention, and manual troubleshooting sessions.
 
 ---
 
