@@ -571,8 +571,13 @@ sudo docker pull vllm/vllm-openai:latest
 ### 9.2 Verify GitHub Actions Permissions
 1. In repository **Settings → Actions → General**
 2. Scroll to **Workflow permissions**
-3. Ensure **Read and write permissions** is selected
+3. Select either:
+   - **Read repository contents and packages permissions** (Recommended - more secure)
+     - Your workflow only reads code and pushes to ECR (external)
+   - **Read and write permissions** (If you plan to add automated releases/tags later)
 4. Click **Save**
+
+> **Note**: Your current workflow doesn't write to the GitHub repository, so read-only permissions are sufficient. "Read and write" is only needed if you later add features like automated git tagging or GitHub Releases.
 
 ---
 
