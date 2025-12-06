@@ -6,6 +6,9 @@ authors = ["Long Hoang <longhhoang1202@gmail.com>"]
 readme = "README.md"
 package-mode = false
 
+[tool.poetry.scripts]
+deploy = "scripts.deploy:main"
+
 [tool.poetry.dependencies]
 python = "^3.10"
 boto3 = "^1.35.0"
