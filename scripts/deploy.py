@@ -32,8 +32,12 @@ logger.remove()  # Remove default handler
 logger.add(
     sys.stderr,
     format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
-    level="INFO"
+    level="INFO",
+    colorize=True
 )
+
+# Custom level colors
+logger.level("INFO", color="<blue>")
 
 
 class DeploymentConfig:
@@ -201,7 +205,7 @@ def deploy_container_via_ssm(
     commands.extend([
         "echo '=== ECR Login ==='",
         f"aws ecr get-login-password --region {config.region} | "
-        f"docker login --username AWS --password-stdin {config.ecr_registry}",
+        f"docker login --username AWS --password-stdin {config.ecr_registry} 2>&1 | grep -v 'WARNING'",
         "",
         "echo '=== Pulling Docker Image ==='",
         f"docker pull {image_uri}",
@@ -252,10 +256,11 @@ def deploy_container_via_ssm(
         
         # Wait for command to complete
         logger.info("Waiting for command execution...")
-        max_retries = config.config['deployment']['max_retries']
         retry_delay = config.config['deployment']['retry_delay_seconds']
+        timeout = config.config['deployment']['ssm_command_timeout_seconds']
+        max_attempts = timeout // retry_delay  # Calculate attempts based on timeout
         
-        for attempt in range(max_retries):
+        for attempt in range(max_attempts):
             time.sleep(retry_delay)
             
             cmd_response = ssm_client.get_command_invocation(
@@ -264,7 +269,6 @@ def deploy_container_via_ssm(
             )
             
             status = cmd_response['Status']
-            logger.info(f"Command status: {status}")
             
             if status == 'Success':
                 logger.success("Deployment command executed successfully")
@@ -277,7 +281,8 @@ def deploy_container_via_ssm(
                 print(cmd_response.get('StandardErrorContent', ''))
                 return None
             elif status in ['InProgress', 'Pending']:
-                logger.info(f"Still running... (attempt {attempt + 1}/{max_retries})")
+                if (attempt + 1) % 6 == 0:  # Log every minute (6 * 10 seconds)
+                    logger.info(f"Still running... ({(attempt + 1) * retry_delay}s elapsed)")
                 continue
         
         logger.error("Command execution timed out")
