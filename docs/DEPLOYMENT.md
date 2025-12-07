@@ -16,7 +16,7 @@ This guide explains how to deploy the vLLM server to EC2 using the `deploy.py` s
 
 ```bash
 cd /path/to/slm-ft-serving
-poetry run deploy
+poetry run python scripts/deploy.py
 ```
 
 This will:
@@ -34,7 +34,7 @@ This will:
 ### Deploy Specific Image Tag
 
 ```bash
-poetry run deploy --image-tag abc123def
+poetry run python scripts/deploy.py --image-tag abc123def
 ```
 
 Uses image tagged with specific git SHA from ECR.
@@ -42,7 +42,7 @@ Uses image tagged with specific git SHA from ECR.
 ### Quick Restart (No New Image)
 
 ```bash
-poetry run deploy --quick-restart
+poetry run python scripts/deploy.py --quick-restart
 ```
 
 Just restarts the existing container without pulling a new image or recreating the container. Fastest option when no code changes.
@@ -50,7 +50,7 @@ Just restarts the existing container without pulling a new image or recreating t
 ### Skip Instance Start (If Already Running)
 
 ```bash
-poetry run deploy --skip-start
+poetry run python scripts/deploy.py --skip-start
 ```
 
 Useful if you manually started the instance or it's already running.
@@ -58,7 +58,7 @@ Useful if you manually started the instance or it's already running.
 ### Skip Health Check Validation
 
 ```bash
-poetry run deploy --skip-validation
+poetry run python scripts/deploy.py --skip-validation
 ```
 
 Deploys without waiting for health check to pass. Not recommended for production.
@@ -243,7 +243,7 @@ aws ec2 stop-instances --instance-ids <id> --region us-east-1
 ### Start Instance for Deployment
 
 ```bash
-poetry run deploy  # Automatically starts instance
+poetry run python scripts/deploy.py  # Automatically starts instance
 ```
 
 ## Advanced Usage
@@ -251,7 +251,7 @@ poetry run deploy  # Automatically starts instance
 ### Deployment Script Help
 
 ```bash
-poetry run deploy --help
+poetry run python scripts/deploy.py --help
 ```
 
 ### Custom Configuration
@@ -270,7 +270,7 @@ Edit `config/deployment.yml` to adjust:
 aws ecr describe-images --repository-name slm-ft-serving-vllm --region us-east-1
 
 # Deploy specific SHA
-poetry run deploy --image-tag <previous-sha>
+poetry run python scripts/deploy.py --image-tag <previous-sha>
 ```
 
 ## Next Steps
