@@ -41,5 +41,5 @@ deployment:
   retry_delay_seconds: 10
   ec2_start_timeout_seconds: 300
   ssm_command_timeout_seconds: 600
-  health_check_timeout_seconds: 120
+  health_check_timeout_seconds: 300  # 5 minutes for vLLM model loading
   health_check_interval_seconds: 10
