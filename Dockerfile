@@ -27,8 +27,7 @@ EXPOSE ${PORT}
 # - Tensor parallelism: 1 GPU (g6.2xlarge has single L4)
 # - Trust remote code for model loading
 # - Disable log requests for cleaner CloudWatch logs
-CMD python3 -m vllm.entrypoints.openai.api_server \
-    --model ${MODEL_NAME} \
+CMD vllm serve ${MODEL_NAME} \
     --enable-lora \
     --lora-modules medical-ie=${ADAPTER_NAME} \
     --tensor-parallel-size ${TENSOR_PARALLEL_SIZE} \
