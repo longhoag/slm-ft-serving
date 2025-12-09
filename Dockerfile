@@ -21,17 +21,13 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
 EXPOSE ${PORT}
 
 # Start vLLM server with base model + LoRA adapter
-# vLLM OpenAI-compatible server with:
-# - Base model: meta-llama/Llama-3.1-8B (auto-downloads from HuggingFace)
-# - LoRA adapter: loghoag/llama-3.1-8b-medical-ie
-# - Tensor parallelism: 1 GPU (g6.2xlarge has single L4)
-# - Trust remote code for model loading
-# - Disable log requests for cleaner CloudWatch logs
-CMD vllm serve ${MODEL_NAME} \
+# Use shell script to properly expand environment variables
+# The vllm/vllm-openai base image expects: vllm serve <model> [options]
+CMD ["/bin/bash", "-c", "vllm serve $MODEL_NAME \
     --enable-lora \
-    --lora-modules medical-ie=${ADAPTER_NAME} \
-    --tensor-parallel-size ${TENSOR_PARALLEL_SIZE} \
-    --host ${HOST} \
-    --port ${PORT} \
+    --lora-modules medical-ie=$ADAPTER_NAME \
+    --tensor-parallel-size $TENSOR_PARALLEL_SIZE \
+    --host $HOST \
+    --port $PORT \
     --trust-remote-code \
-    --disable-log-requests
+    --disable-log-requests"]
