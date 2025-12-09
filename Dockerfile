@@ -22,5 +22,7 @@ EXPOSE ${PORT}
 
 # Override entrypoint and command to properly use vllm serve
 # The base image's ENTRYPOINT interferes with our command
+# Reduce max_model_len to 8192 to fit in L4 GPU memory (23GB total)
+# Default 131k tokens needs 16GB KV cache, but only 3GB available after model load
 ENTRYPOINT []
-CMD ["sh", "-c", "vllm serve $MODEL_NAME --enable-lora --lora-modules medical-ie=$ADAPTER_NAME --tensor-parallel-size $TENSOR_PARALLEL_SIZE --host $HOST --port $PORT --trust-remote-code --disable-log-requests"]
+CMD ["sh", "-c", "vllm serve $MODEL_NAME --enable-lora --lora-modules medical-ie=$ADAPTER_NAME --tensor-parallel-size $TENSOR_PARALLEL_SIZE --host $HOST --port $PORT --trust-remote-code --disable-log-requests --max-model-len 8192 --gpu-memory-utilization 0.95"]
