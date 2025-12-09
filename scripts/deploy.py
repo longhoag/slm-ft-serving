@@ -311,6 +311,9 @@ def validate_deployment(config: DeploymentConfig) -> bool:
     RUNNING=$(docker ps --filter name={container_name} --format '{{{{.Names}}}}')
     if [ "$RUNNING" != "{container_name}" ]; then
         echo "ERROR: Container {container_name} is not running"
+        docker ps -a --filter name={container_name}
+        echo "=== Last 100 lines of container logs ==="
+        docker logs {container_name} --tail 100
         exit 1
     fi
     
@@ -328,7 +331,12 @@ def validate_deployment(config: DeploymentConfig) -> bool:
     done
     
     echo "ERROR: Health check timed out after {timeout} seconds"
-    docker logs {container_name} --tail 50
+    echo "=== Container Status ==="
+    docker ps -a --filter name={container_name}
+    echo "=== Last 200 lines of container logs ==="
+    docker logs {container_name} --tail 200
+    echo "=== GPU Status ==="
+    nvidia-smi
     exit 1
     """
     
