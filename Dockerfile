@@ -20,14 +20,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
 # Expose vLLM API port
 EXPOSE ${PORT}
 
-# Start vLLM server with base model + LoRA adapter
-# Use shell script to properly expand environment variables
-# The vllm/vllm-openai base image expects: vllm serve <model> [options]
-CMD ["/bin/bash", "-c", "vllm serve $MODEL_NAME \
-    --enable-lora \
-    --lora-modules medical-ie=$ADAPTER_NAME \
-    --tensor-parallel-size $TENSOR_PARALLEL_SIZE \
-    --host $HOST \
-    --port $PORT \
-    --trust-remote-code \
-    --disable-log-requests"]
+# Override entrypoint and command to properly use vllm serve
+# The base image's ENTRYPOINT interferes with our command
+ENTRYPOINT []
+CMD ["sh", "-c", "vllm serve $MODEL_NAME --enable-lora --lora-modules medical-ie=$ADAPTER_NAME --tensor-parallel-size $TENSOR_PARALLEL_SIZE --host $HOST --port $PORT --trust-remote-code --disable-log-requests"]
