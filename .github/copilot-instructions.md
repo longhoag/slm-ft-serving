@@ -84,6 +84,19 @@ Commands must be "execute with precaution to errors" - implement failsafe measur
 4. **Poetry for Python**: No raw pip commands
 5. **Loguru for logging**: No print statements
 
+## Stage 1 Completion Status
+✅ **COMPLETE** - vLLM server successfully deployed and validated
+- Docker image with vLLM + Llama 3.1 8B + LoRA adapter (medical-ie)
+- EC2 g6.2xlarge deployment via SSM (no SSH)
+- Model persistence on EBS via Docker named volumes
+- Health checks passing, inference validated
+- Structured medical entity extraction working correctly
+
+### Stage 1 Known Limitation
+- `/v1/chat/completions` endpoint not available (requires chat template)
+- Currently using `/v1/completions` endpoint with raw prompts
+- **Fix deferred to Stage 2** (when implementing FastAPI gateway)
+
 ## Future Stages
 Instructions for Stages 2-4 will be added to this file as the project progresses. Do not implement or create infrastructure for future stages prematurely.
 
@@ -91,6 +104,45 @@ Instructions for Stages 2-4 will be added to this file as the project progresses
 - API gateway layer on same EC2 instance
 - Health checks + linting + API tests
 - Gateway waits for vLLM readiness
+- **Add chat template support** for `/v1/chat/completions` endpoint
+
+### Stage 2: Chat Template Implementation (TODO)
+When implementing Stage 2, add Llama 3.1 chat template to enable `/v1/chat/completions`:
+
+1. **Create `chat_template.jinja`** in project root:
+```jinja
+{{- bos_token }}
+{%- if messages[0]['role'] == 'system' %}
+    {%- set system_message = messages[0]['content'] %}
+    {%- set loop_messages = messages[1:] %}
+{%- else %}
+    {%- set loop_messages = messages %}
+{%- endif %}
+{%- if system_message is defined %}
+    {{- '<|start_header_id|>system<|end_header_id|>\n\n' + system_message + '<|eot_id|>' }}
+{%- endif %}
+{%- for message in loop_messages %}
+    {%- if message['role'] == 'user' %}
+        {{- '<|start_header_id|>user<|end_header_id|>\n\n' + message['content'] + '<|eot_id|>' }}
+    {%- elif message['role'] == 'assistant' %}
+        {{- '<|start_header_id|>assistant<|end_header_id|>\n\n' + message['content'] + '<|eot_id|>' }}
+    {%- endif %}
+{%- endfor %}
+{%- if add_generation_prompt %}
+    {{- '<|start_header_id|>assistant<|end_header_id|>\n\n' }}
+{%- endif %}
+```
+
+2. **Update Dockerfile** - Add after `WORKDIR /app`:
+```dockerfile
+# Copy chat template for Llama 3.1 (required for chat completions API)
+COPY chat_template.jinja /app/chat_template.jinja
+```
+
+3. **Update Dockerfile CMD** - Add `--chat-template` flag:
+```dockerfile
+CMD ["sh", "-c", "vllm serve $MODEL_NAME --enable-lora --lora-modules medical-ie=$ADAPTER_NAME --tensor-parallel-size $TENSOR_PARALLEL_SIZE --host $HOST --port $PORT --trust-remote-code --disable-log-requests --max-model-len 8192 --max-num-seqs 32 --gpu-memory-utilization 0.90 --chat-template /app/chat_template.jinja"]
+```
 
 **Stage 3 Preview** (Frontend):
 - React/Next.js on Vercel (separate repo)
