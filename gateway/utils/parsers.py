@@ -178,4 +178,3 @@ def clean_json_string(text: str) -> str:
     text = text.strip()
 
     return text
-
