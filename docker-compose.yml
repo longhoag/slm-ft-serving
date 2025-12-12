@@ -1,0 +1,91 @@
+# Docker Compose orchestration for vLLM + FastAPI gateway
+# 
+# Architecture:
+#   - vLLM server: Port 8000 (internal), serves Llama 3.1 8B + medical-ie LoRA
+#   - FastAPI gateway: Port 8080 (external), provides REST API for medical extraction
+#
+# Deployment:
+#   1. GitHub Actions builds images → pushes to ECR
+#   2. deploy.py pulls images from ECR → runs docker-compose up on EC2
+#
+# Usage:
+#   docker-compose up -d              # Start all services
+#   docker-compose down               # Stop all services
+#   docker-compose logs -f gateway    # View gateway logs
+#   docker-compose ps                 # Check status
+
+version: '3.8'
+
+services:
+  # vLLM server: Inference engine for Llama 3.1 8B model
+  vllm:
+    image: ${ECR_REGISTRY}/slm-ft-serving-vllm:latest
+    container_name: vllm-server
+    ports:
+      - "8000:8000"  # Expose vLLM API (for testing, not required for gateway)
+    volumes:
+      # Persistent HuggingFace model cache (survives container restarts)
+      - huggingface-cache:/root/.cache/huggingface
+    environment:
+      # HuggingFace token (fetch from AWS Secrets Manager at runtime)
+      - HF_TOKEN=${HF_TOKEN}
+      
+      # Model configuration
+      - MODEL_NAME=meta-llama/Llama-3.1-8B
+      - ADAPTER_NAME=loghoag/llama-3.1-8b-medical-ie
+      
+      # Server configuration
+      - PORT=8000
+      - HOST=0.0.0.0
+      - TENSOR_PARALLEL_SIZE=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s  # vLLM needs time to load model
+    restart: unless-stopped
+    networks:
+      - slm-network
+
+  # FastAPI gateway: REST API for medical information extraction
+  gateway:
+    image: ${ECR_REGISTRY}/slm-ft-serving-gateway:latest
+    container_name: fastapi-gateway
+    ports:
+      - "8080:8080"  # External API port
+    environment:
+      # CORS configuration (allow all for Stage 2, restrict in Stage 3)
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      
+      # vLLM backend URL (Docker network internal address)
+      - VLLM_BASE_URL=http://vllm:8000
+    depends_on:
+      vllm:
+        condition: service_healthy  # Wait for vLLM to be ready
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8080/health', timeout=5.0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - slm-network
+
+# Docker volumes for persistent data
+volumes:
+  huggingface-cache:
+    external: true  # Created manually: docker volume create huggingface-cache
+
+# Docker network for inter-container communication
+networks:
+  slm-network:
+    driver: bridge
