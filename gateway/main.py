@@ -4,6 +4,9 @@ FastAPI gateway for vLLM medical information extraction.
 This gateway provides a REST API for extracting structured cancer information
 from clinical text using a fine-tuned Llama 3.1 8B model served by vLLM.
 """
+import os
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
@@ -19,20 +22,49 @@ logger.add(
     format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}"
 )
 
-# Initialize FastAPI application
+
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI):
+    """
+    Lifespan context manager for startup and shutdown events.
+    
+    Replaces deprecated @app.on_event("startup") and @app.on_event("shutdown").
+    
+    Args:
+        app_instance: FastAPI application instance (unused but required by signature)
+    """
+    # Startup: Runs when application starts
+    logger.info("🚀 Medical IE Gateway starting up...")
+    logger.info("   Version: 0.1.0")
+    logger.info("   Docs: http://localhost:8080/docs")
+    
+    yield  # Application runs here
+    
+    # Shutdown: Runs when application stops
+    logger.info("👋 Medical IE Gateway shutting down...")
+
+
+# Initialize FastAPI application with lifespan handler
 app = FastAPI(
     title="Medical Information Extraction Gateway",
     description="REST API for extracting structured cancer information from clinical text",
     version="0.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
-    openapi_url="/openapi.json"
+    openapi_url="/openapi.json",
+    lifespan=lifespan
 )
 
 # Configure CORS middleware
+# CORS_ORIGINS env var: comma-separated list of allowed origins
+# Example: CORS_ORIGINS="https://medical-ie.vercel.app,https://localhost:3000"
+# Default: "*" (allow all - suitable for Stage 2 testing, restrict in Stage 3+)
+allowed_origins = os.getenv("CORS_ORIGINS", "*")
+origins_list = [allowed_origins] if allowed_origins == "*" else allowed_origins.split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # TODO: Restrict in production
+    allow_origins=origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
@@ -41,21 +73,6 @@ app.add_middleware(
 # Include routers
 app.include_router(health.router)
 app.include_router(extraction.router)
-
-# Startup event
-@app.on_event("startup")
-async def startup_event():
-    """Log gateway startup."""
-    logger.info("🚀 Medical IE Gateway starting up...")
-    logger.info(f"   Version: 0.1.0")
-    logger.info(f"   Docs: http://localhost:8080/docs")
-
-
-# Shutdown event
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Log gateway shutdown."""
-    logger.info("👋 Medical IE Gateway shutting down...")
 
 
 # Root endpoint
