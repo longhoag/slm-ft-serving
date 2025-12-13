@@ -2,6 +2,7 @@
 vLLM HTTP client wrapper for making requests to vLLM server.
 """
 
+import os
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -18,19 +19,24 @@ class VLLMClient:
     - Chat completions API (/v1/chat/completions)
 
     Attributes:
-        base_url: Base URL of vLLM server (default: http://localhost:8000)
+        base_url: Base URL of vLLM server (from VLLM_BASE_URL env var)
         timeout: Request timeout in seconds (default: 60.0)
         client: Async HTTP client instance
     """
 
-    def __init__(self, base_url: str = "http://localhost:8000", timeout: float = 60.0):
+    def __init__(self, base_url: str | None = None, timeout: float = 60.0):
         """
         Initialize vLLM client.
 
         Args:
-            base_url: Base URL of vLLM server
+            base_url: Base URL of vLLM server (defaults to VLLM_BASE_URL env var,
+                      falls back to http://localhost:8000 for local development)
             timeout: Request timeout in seconds
         """
+        # Priority: explicit arg > env var > localhost fallback
+        if base_url is None:
+            base_url = os.getenv("VLLM_BASE_URL", "http://localhost:8000")
+        
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.client = httpx.AsyncClient(timeout=timeout)
