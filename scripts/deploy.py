@@ -1,17 +1,26 @@
 #!/usr/bin/env python3
 """
-Stage 1 Deployment Script - EC2 vLLM Server Deployment via SSM
+Stage 2 Deployment Script - Docker Compose Orchestration via SSM
 
-This script orchestrates deployment from local terminal to EC2 via AWS SSM:
+This script orchestrates multi-container deployment (vLLM + FastAPI gateway):
 1. Start EC2 instance
 2. Wait for instance to be ready (status checks passed)
-3. Send SSM run command to pull and run Docker container from ECR
-4. Monitor deployment status and validate container health
+3. Send SSM run command to:
+   - Copy docker-compose.yml to EC2
+   - Pull images from ECR (vllm + gateway)
+   - Run docker-compose up with health check dependencies
+4. Monitor deployment status and validate both containers
+
+Stage 2 Changes:
+- Uses docker-compose instead of docker run
+- Deploys both vLLM server (port 8000) and FastAPI gateway (port 8080)
+- Gateway waits for vLLM health check before starting
+- Single orchestration command for entire stack
 
 Prerequisites:
 - AWS credentials configured (via AWS CLI or environment variables)
-- EC2 instance with SSM agent installed and IAM role attached
-- ECR repository with pushed image
+- EC2 instance with SSM agent, Docker, and Docker Compose installed
+- ECR repositories with pushed images (vllm + gateway)
 - CloudWatch log group configured for SSM output
 - Configuration file: config/deployment.yml
 """
@@ -155,34 +164,42 @@ def start_ec2_instance(config: DeploymentConfig) -> bool:
         return False
 
 
-def deploy_container_via_ssm(
+def deploy_compose_stack_via_ssm(
     config: DeploymentConfig,
     image_tag: str = "latest",
     force_redeploy: bool = True
 ) -> Optional[str]:
     """
-    Send SSM run command to:
+    Send SSM run command to deploy Docker Compose stack:
     1. Create Docker volume (if doesn't exist)
-    2. Stop and remove existing container (if force_redeploy=True)
+    2. Stop and remove existing stack (if force_redeploy=True)
     3. Login to ECR
-    4. Pull Docker image
-    5. Run new container with volume mount and environment variables
+    4. Pull both Docker images (vllm + gateway)
+    5. Copy docker-compose.yml to EC2
+    6. Run docker-compose up with environment variables
     
     Returns:
         Command ID if successful, None otherwise
     """
-    logger.info(f"Deploying container to {config.instance_id} via SSM")
+    logger.info(f"Deploying Docker Compose stack to {config.instance_id} via SSM")
     
     ssm_client = boto3.client('ssm', region_name=config.region)
-    image_uri = f"{config.ecr_registry}/{config.ecr_repository}:{image_tag}"
     
-    # Build deployment command
-    container_name = config.config['docker']['container_name']
+    # Read docker-compose.yml from project root
+    script_dir = Path(__file__).parent
+    compose_file = script_dir.parent / 'docker-compose.yml'
+    
+    if not compose_file.exists():
+        logger.error(f"docker-compose.yml not found at {compose_file}")
+        return None
+    
+    with open(compose_file, 'r', encoding='utf-8') as f:
+        compose_content = f.read()
+    
+    # Escape special characters for bash heredoc
+    compose_content_escaped = compose_content.replace('$', '\\$').replace('`', '\\`')
+    
     volume_name = config.config['docker']['volume_name']
-    cache_mount_path = config.config['docker']['cache_mount_path']
-    model_name = config.config['model']['base_model']
-    adapter_name = config.config['model']['adapter_model']
-    api_port = config.config['vllm']['api_port']
     
     commands = [
         "#!/bin/bash",
@@ -196,9 +213,9 @@ def deploy_container_via_ssm(
     
     if force_redeploy:
         commands.extend([
-            "echo '=== Stopping Existing Container ==='",
-            f"docker stop {container_name} 2>/dev/null || echo 'No running container'",
-            f"docker rm {container_name} 2>/dev/null || echo 'No container to remove'",
+            "echo '=== Stopping Existing Stack ==='",
+            "cd /home/ec2-user",
+            "docker-compose down 2>/dev/null || echo 'No existing stack to stop'",
             "",
         ])
     
@@ -207,30 +224,36 @@ def deploy_container_via_ssm(
         f"aws ecr get-login-password --region {config.region} | "
         f"docker login --username AWS --password-stdin {config.ecr_registry} 2>&1 | grep -v 'WARNING'",
         "",
-        "echo '=== Pulling Docker Image ==='",
-        f"docker pull {image_uri}",
+        "echo '=== Pulling Docker Images ==='",
+        f"docker pull {config.ecr_registry}/slm-ft-serving-vllm:{image_tag}",
+        f"docker pull {config.ecr_registry}/slm-ft-serving-gateway:{image_tag}",
         "",
-        "echo '=== Retrieving HuggingFace Token ==='",
+        "echo '=== Writing docker-compose.yml ==='",
+        "cd /home/ec2-user",
+        "cat > docker-compose.yml << 'COMPOSE_EOF'",
+        compose_content_escaped,
+        "COMPOSE_EOF",
+        "",
+        "echo '=== Retrieving Secrets ==='",
         f"HF_TOKEN=$(aws secretsmanager get-secret-value "
         f"--secret-id {config.hf_token_secret_name} "
         f"--query SecretString --output text --region {config.region})",
         "",
-        "echo '=== Running vLLM Container ==='",
-        "docker run -d \\",
-        f"  --name {container_name} \\",
-        "  --gpus all \\",
-        f"  -p {api_port}:{api_port} \\",
-        f"  -e HF_TOKEN=\"$HF_TOKEN\" \\",
-        f"  -e MODEL_NAME=\"{model_name}\" \\",
-        f"  -e ADAPTER_NAME=\"{adapter_name}\" \\",
-        f"  -e PORT={api_port} \\",
-        f"  -v {volume_name}:{cache_mount_path} \\",
-        f"  {image_uri}",
+        "echo '=== Setting Environment Variables ==='",
+        f"export ECR_REGISTRY={config.ecr_registry}",
+        "export HF_TOKEN=\"$HF_TOKEN\"",
+        "export CORS_ORIGINS=\"*\"  # Stage 2: Allow all for testing",
         "",
-        "echo '=== Verifying Container Status ==='",
-        f"docker ps --filter name={container_name}",
+        "echo '=== Starting Docker Compose Stack ==='",
+        "docker-compose up -d",
+        "",
+        "echo '=== Verifying Stack Status ==='",
+        "sleep 5",  # Brief wait for containers to initialize
+        "docker-compose ps",
         "",
         "echo '=== Deployment Complete ==='",
+        "echo 'vLLM server: http://localhost:8000'",
+        "echo 'Gateway API: http://localhost:8080'",
     ])
     
     command_string = "\n".join(commands)
@@ -294,47 +317,85 @@ def deploy_container_via_ssm(
 
 
 def validate_deployment(config: DeploymentConfig) -> bool:
-    """Verify container is running and healthy via health check endpoint"""
+    """Verify both containers are running and healthy via health check endpoints"""
     logger.info("Validating deployment...")
     
     ssm_client = boto3.client('ssm', region_name=config.region)
-    container_name = config.config['docker']['container_name']
-    api_port = config.config['vllm']['api_port']
+    vllm_port = config.config['vllm']['api_port']
+    gateway_port = 8080  # FastAPI gateway port
     timeout = config.config['deployment']['health_check_timeout_seconds']
     interval = config.config['deployment']['health_check_interval_seconds']
     
-    # Check container status via SSM
+    # Check both containers via SSM
     health_check_cmd = f"""
     #!/bin/bash
     
-    # Check if container is running
-    RUNNING=$(docker ps --filter name={container_name} --format '{{{{.Names}}}}')
-    if [ "$RUNNING" != "{container_name}" ]; then
-        echo "ERROR: Container {container_name} is not running"
-        docker ps -a --filter name={container_name}
-        echo "=== Last 100 lines of container logs ==="
-        docker logs {container_name} --tail 100
+    echo "=== Checking Docker Compose Stack ==="
+    cd /home/ec2-user
+    docker-compose ps
+    
+    # Check if both containers are running
+    VLLM_RUNNING=$(docker ps --filter name=vllm-server --format '{{{{.Names}}}}')
+    GATEWAY_RUNNING=$(docker ps --filter name=fastapi-gateway --format '{{{{.Names}}}}')
+    
+    if [ "$VLLM_RUNNING" != "vllm-server" ]; then
+        echo "ERROR: vLLM container is not running"
+        docker ps -a --filter name=vllm-server
+        echo "=== vLLM logs ==="
+        docker logs vllm-server --tail 100
         exit 1
     fi
     
-    echo "Container is running, checking health endpoint..."
+    if [ "$GATEWAY_RUNNING" != "fastapi-gateway" ]; then
+        echo "ERROR: Gateway container is not running"
+        docker ps -a --filter name=fastapi-gateway
+        echo "=== Gateway logs ==="
+        docker logs fastapi-gateway --tail 100
+        exit 1
+    fi
     
-    # Check vLLM health endpoint
+    echo "Both containers running, checking health endpoints..."
+    
+    # Check vLLM health endpoint (may take 4-5 mins for model loading)
+    echo "Checking vLLM health (model loading may take 4-5 minutes)..."
     max_attempts={timeout // interval}
     for i in $(seq 1 $max_attempts); do
-        if curl -f http://localhost:{api_port}/health 2>/dev/null; then
-            echo "SUCCESS: vLLM server is healthy"
-            exit 0
+        if curl -f http://localhost:{vllm_port}/health 2>/dev/null; then
+            echo "✅ vLLM server is healthy"
+            break
         fi
-        echo "Attempt $i/$max_attempts: Health check not ready, waiting..."
+        echo "Attempt $i/$max_attempts: vLLM not ready, waiting..."
         sleep {interval}
     done
     
-    echo "ERROR: Health check timed out after {timeout} seconds"
-    echo "=== Container Status ==="
-    docker ps -a --filter name={container_name}
-    echo "=== Last 200 lines of container logs ==="
-    docker logs {container_name} --tail 200
+    # Check gateway health endpoint
+    echo "Checking FastAPI gateway health..."
+    for i in $(seq 1 10); do
+        if curl -f http://localhost:{gateway_port}/health 2>/dev/null; then
+            echo "✅ Gateway is healthy"
+            
+            # Get detailed health status
+            echo "=== Gateway Health Details ==="
+            curl -s http://localhost:{gateway_port}/health | python3 -m json.tool
+            
+            echo ""
+            echo "SUCCESS: Full stack is healthy"
+            echo "- vLLM: http://localhost:{vllm_port}"
+            echo "- Gateway: http://localhost:{gateway_port}"
+            echo "- API Docs: http://localhost:{gateway_port}/docs"
+            exit 0
+        fi
+        echo "Gateway attempt $i/10: waiting..."
+        sleep 3
+    done
+    
+    echo "ERROR: Health checks failed"
+    echo "=== Stack Status ==="
+    docker-compose ps
+    echo "=== vLLM Logs (last 200 lines) ==="
+    docker logs vllm-server --tail 200
+    echo "=== Gateway Logs (last 200 lines) ==="
+    docker logs fastapi-gateway --tail 200
     echo "=== GPU Status ==="
     nvidia-smi
     exit 1
@@ -418,7 +479,8 @@ def main():
     config_path = script_dir.parent / 'config' / 'deployment.yml'
     
     try:
-        logger.info("=== Stage 1 Deployment Starting ===")
+        logger.info("=== Stage 2 Deployment Starting ===")
+        logger.info("Deploying Docker Compose stack: vLLM + FastAPI Gateway")
         
         # Load configuration
         config = DeploymentConfig(config_path)
@@ -431,16 +493,16 @@ def main():
         else:
             logger.info("Skipping EC2 instance start")
         
-        # Step 2: Deploy container
+        # Step 2: Deploy Docker Compose stack
         if args.quick_restart:
-            logger.info("Quick restart: restarting existing container...")
-            command_id = deploy_container_via_ssm(
+            logger.info("Quick restart: restarting existing stack...")
+            command_id = deploy_compose_stack_via_ssm(
                 config,
                 image_tag=args.image_tag,
                 force_redeploy=False
             )
         else:
-            command_id = deploy_container_via_ssm(
+            command_id = deploy_compose_stack_via_ssm(
                 config,
                 image_tag=args.image_tag,
                 force_redeploy=True
@@ -450,7 +512,7 @@ def main():
             logger.error("Deployment failed")
             sys.exit(1)
         
-        # Step 3: Validate deployment
+        # Step 3: Validate deployment (both containers)
         if not args.skip_validation:
             if not validate_deployment(config):
                 logger.error("Deployment validation failed")
@@ -459,8 +521,10 @@ def main():
             logger.info("Skipping validation")
         
         logger.success("=== Deployment Complete ===")
-        api_port = config.config['vllm']['api_port']
-        logger.info(f"vLLM server running at http://<instance-ip>:{api_port}")
+        vllm_port = config.config['vllm']['api_port']
+        logger.info(f"✅ vLLM server: http://<instance-ip>:{vllm_port}")
+        logger.info(f"✅ Gateway API: http://<instance-ip>:8080")
+        logger.info(f"✅ API Documentation: http://<instance-ip>:8080/docs")
         logger.info("Models cached on EBS volume for future deployments")
         
     except KeyboardInterrupt:
