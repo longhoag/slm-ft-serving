@@ -213,9 +213,17 @@ def deploy_compose_stack_via_ssm(
     
     if force_redeploy:
         commands.extend([
-            "echo '=== Stopping Existing Stack ==='",
+            "echo '=== Cleaning Up Existing Containers ==='",
             "cd /home/ec2-user",
-            "docker-compose down 2>/dev/null || echo 'No existing stack to stop'",
+            "",
+            "# Stop and remove docker-compose stack (Stage 2 containers)",
+            "docker-compose down 2>/dev/null || echo 'No existing compose stack'",
+            "",
+            "# Remove any standalone containers from Stage 1 deployment",
+            "# (prevents container name conflicts)",
+            "echo 'Checking for Stage 1 containers...'",
+            "docker stop vllm-server 2>/dev/null || echo 'No Stage 1 vllm-server running'",
+            "docker rm vllm-server 2>/dev/null || echo 'No Stage 1 vllm-server to remove'",
             "",
         ])
     
