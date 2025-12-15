@@ -1,4 +1,5 @@
-# Deployment Configuration for Stage 1
+# Deployment Configuration for Stage 2
+# Docker Compose stack: vLLM server + FastAPI gateway
 # Critical values are stored in AWS SSM Parameter Store
 # Static configuration values are defined here as defaults
 
@@ -10,7 +11,9 @@ ec2:
   instance_type: g6.2xlarge
   
 ecr:
-  repository_name: slm-ft-serving-vllm
+  # Separate repositories for vLLM and gateway images
+  vllm_repository: slm-ft-serving-vllm
+  gateway_repository: slm-ft-serving-gateway
   # ECR registry will be dynamically constructed from account_id and region
 
 secrets:
@@ -24,9 +27,13 @@ model:
 vllm:
   api_port: 8000
   tensor_parallel_size: 1  # g6.2xlarge has 1 GPU
+
+gateway:
+  api_port: 8080
+  cors_origins: "*"  # Stage 2: Allow all for testing, restrict in Stage 3
   
 docker:
-  container_name: vllm-server
+  # Container names managed by docker-compose (vllm-server, fastapi-gateway)
   # Named volume persists models on EBS across container recreations
   volume_name: huggingface-cache
   # Mount point inside container where vLLM caches models

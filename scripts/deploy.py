@@ -109,9 +109,14 @@ class DeploymentConfig:
         return f"{self.account_id}.dkr.ecr.{self.region}.amazonaws.com"
     
     @property
-    def ecr_repository(self) -> str:
-        """Get ECR repository name"""
-        return self.config['ecr']['repository_name']
+    def ecr_vllm_repository(self) -> str:
+        """Get vLLM ECR repository name"""
+        return self.config['ecr']['vllm_repository']
+    
+    @property
+    def ecr_gateway_repository(self) -> str:
+        """Get gateway ECR repository name"""
+        return self.config['ecr']['gateway_repository']
 
 
 def start_ec2_instance(config: DeploymentConfig) -> bool:
@@ -232,9 +237,9 @@ def deploy_compose_stack_via_ssm(
         f"aws ecr get-login-password --region {config.region} | "
         f"docker login --username AWS --password-stdin {config.ecr_registry} 2>&1 | grep -v 'WARNING'",
         "",
-        "echo '=== Pulling Docker Images ==='",
-        f"docker pull {config.ecr_registry}/slm-ft-serving-vllm:{image_tag}",
-        f"docker pull {config.ecr_registry}/slm-ft-serving-gateway:{image_tag}",
+        "echo '=== Pulling Docker Images ===",
+        f"docker pull {config.ecr_registry}/{config.ecr_vllm_repository}:{image_tag}",
+        f"docker pull {config.ecr_registry}/{config.ecr_gateway_repository}:{image_tag}",
         "",
         "echo '=== Writing docker-compose.yml ==='",
         "cd /home/ec2-user",
@@ -247,10 +252,11 @@ def deploy_compose_stack_via_ssm(
         f"--secret-id {config.hf_token_secret_name} "
         f"--query SecretString --output text --region {config.region})",
         "",
-        "echo '=== Setting Environment Variables ==='",
+        "echo '=== Setting Environment Variables ===",
         f"export ECR_REGISTRY={config.ecr_registry}",
         "export HF_TOKEN=\"$HF_TOKEN\"",
-        "export CORS_ORIGINS=\"*\"  # Stage 2: Allow all for testing",
+        f"export CORS_ORIGINS=\"{config.config['gateway']['cors_origins']}\"",
+        "echo 'Environment configured for Stage 2 deployment'",
         "",
         "echo '=== Starting Docker Compose Stack ==='",
         "docker-compose up -d",
@@ -330,7 +336,7 @@ def validate_deployment(config: DeploymentConfig) -> bool:
     
     ssm_client = boto3.client('ssm', region_name=config.region)
     vllm_port = config.config['vllm']['api_port']
-    gateway_port = 8080  # FastAPI gateway port
+    gateway_port = config.config['gateway']['api_port']
     timeout = config.config['deployment']['health_check_timeout_seconds']
     interval = config.config['deployment']['health_check_interval_seconds']
     
