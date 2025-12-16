@@ -157,6 +157,7 @@ jobs:
           
           # Build Gateway image with ECR-based cache
           # Cache stored in ECR as: slm-ft-serving-gateway:buildcache
+          # Note: Build context is project root (.) to access pyproject.toml, poetry.lock, and gateway/
           DOCKER_BUILDKIT=1 docker buildx build \
             -t $ECR_REGISTRY/$ECR_GATEWAY_REPOSITORY:$IMAGE_TAG \
             -t $ECR_REGISTRY/$ECR_GATEWAY_REPOSITORY:latest \
@@ -165,6 +166,7 @@ jobs:
             --cache-to type=registry,ref=$ECR_REGISTRY/$ECR_GATEWAY_REPOSITORY:buildcache,mode=max \
             --push \
             --progress=plain \
+            --provenance=false \
             .
           
           echo "Disk space after Gateway build:"

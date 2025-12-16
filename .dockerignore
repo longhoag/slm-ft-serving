@@ -19,8 +19,9 @@ build/
 *.egg
 
 # Poetry
-poetry.lock
-pyproject.toml
+# Note: Keep poetry.lock and pyproject.toml - required by gateway/Dockerfile
+# poetry.lock
+# pyproject.toml
 
 # Documentation
 docs/
