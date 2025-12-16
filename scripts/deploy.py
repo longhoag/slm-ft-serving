@@ -268,7 +268,7 @@ def deploy_compose_stack_via_ssm(
         "echo '=== Starting Docker Compose Stack ==='",
         "docker compose up -d 2>&1",
         "",
-        "echo '=== Verifying Stack Status ===",
+        "echo '=== Verifying Stack Status ==='",
         "sleep 5",  # Brief wait for containers to initialize
         "docker compose ps",
         "",
