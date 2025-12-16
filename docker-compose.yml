@@ -14,8 +14,6 @@
 #   docker-compose logs -f gateway    # View gateway logs
 #   docker-compose ps                 # Check status
 
-version: '3.8'
-
 services:
   # vLLM server: Inference engine for Llama 3.1 8B model
   vllm:

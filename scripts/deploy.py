@@ -221,7 +221,7 @@ def deploy_compose_stack_via_ssm(
     if force_redeploy:
         commands.extend([
             "echo '=== Cleaning Up Existing Containers ==='",
-            "cd ~",  # Use ~ instead of hardcoded path
+            "cd $HOME",  # Use $HOME for better shell compatibility
             "",
             "# Stop and remove docker-compose stack (Stage 2 containers)",
             "docker compose down 2>/dev/null || echo 'No existing compose stack'",
@@ -244,7 +244,7 @@ def deploy_compose_stack_via_ssm(
         f"docker pull {config.ecr_registry}/{config.ecr_gateway_repository}:{image_tag}",
         "",
         "echo '=== Writing docker-compose.yml ==='",
-        "cd ~",  # Use ~ to work with any user
+        "cd $HOME",  # Use $HOME for better shell compatibility
         f"echo '{compose_content_b64}' | base64 -d > docker-compose.yml",
         "",
         "echo '=== Retrieving Secrets ==='",
