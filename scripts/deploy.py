@@ -243,9 +243,9 @@ def deploy_compose_stack_via_ssm(
         "",
         "echo '=== Writing docker-compose.yml ==='",
         "cd ~",  # Use ~ to work with any user
-        "cat > docker-compose.yml << 'COMPOSE_EOF'",
+        "cat > docker-compose.yml << 'END_OF_COMPOSE_FILE'",
         compose_content,
-        "COMPOSE_EOF",
+        "END_OF_COMPOSE_FILE",
         "",
         "echo '=== Retrieving Secrets ==='",
         f"HF_TOKEN=$(aws secretsmanager get-secret-value "
