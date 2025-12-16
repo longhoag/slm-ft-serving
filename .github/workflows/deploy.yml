@@ -66,20 +66,19 @@ jobs:
       - name: Build, tag, and push vLLM image to Amazon ECR
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
         run: |
           echo "=== Building vLLM Docker Image ==="
           echo "Registry: $ECR_REGISTRY"
           echo "Repository: $ECR_VLLM_REPOSITORY"
-          echo "Image Tag: $IMAGE_TAG"
+          echo "Tag: latest"
           
           echo "Disk space before build:"
           df -h
           
           # Build vLLM image with ECR-based cache (no 10GB limit)
-          # Cache stored in ECR as: slm-ft-serving-vllm:buildcache
+          # Only push 'latest' tag to minimize ECR storage costs
+          # Cache stored separately as: slm-ft-serving-vllm:buildcache
           DOCKER_BUILDKIT=1 docker buildx build \
-            -t $ECR_REGISTRY/$ECR_VLLM_REPOSITORY:$IMAGE_TAG \
             -t $ECR_REGISTRY/$ECR_VLLM_REPOSITORY:latest \
             -f Dockerfile \
             --cache-from type=registry,ref=$ECR_REGISTRY/$ECR_VLLM_REPOSITORY:buildcache \
@@ -91,16 +90,14 @@ jobs:
           echo "Disk space after vLLM build:"
           df -h
           
-          echo "✅ Successfully pushed vLLM images to ECR"
+          echo "✅ Successfully pushed vLLM image to ECR"
 
       - name: vLLM image digest
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
         run: |
           echo "✅ vLLM build completed"
           echo "Image URI: $ECR_REGISTRY/$ECR_VLLM_REPOSITORY:latest"
-          echo "Image SHA: $ECR_REGISTRY/$ECR_VLLM_REPOSITORY:$IMAGE_TAG"
 
   build-and-push-gateway:
     name: Build Gateway image and push to ECR
@@ -145,21 +142,20 @@ jobs:
       - name: Build, tag, and push Gateway image to Amazon ECR
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
         run: |
           echo "=== Building Gateway Docker Image ==="
           echo "Registry: $ECR_REGISTRY"
           echo "Repository: $ECR_GATEWAY_REPOSITORY"
-          echo "Image Tag: $IMAGE_TAG"
+          echo "Tag: latest"
           
           echo "Disk space before build:"
           df -h
           
           # Build Gateway image with ECR-based cache
-          # Cache stored in ECR as: slm-ft-serving-gateway:buildcache
+          # Only push 'latest' tag to minimize ECR storage costs
+          # Cache stored separately as: slm-ft-serving-gateway:buildcache
           # Note: Build context is project root (.) to access pyproject.toml, poetry.lock, and gateway/
           DOCKER_BUILDKIT=1 docker buildx build \
-            -t $ECR_REGISTRY/$ECR_GATEWAY_REPOSITORY:$IMAGE_TAG \
             -t $ECR_REGISTRY/$ECR_GATEWAY_REPOSITORY:latest \
             -f gateway/Dockerfile \
             --cache-from type=registry,ref=$ECR_REGISTRY/$ECR_GATEWAY_REPOSITORY:buildcache \
@@ -172,32 +168,30 @@ jobs:
           echo "Disk space after Gateway build:"
           df -h
           
-          echo "✅ Successfully pushed Gateway images to ECR"
+          echo "✅ Successfully pushed Gateway image to ECR"
 
       - name: Gateway image digest
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
         run: |
           echo "✅ Gateway build completed"
           echo "Image URI: $ECR_REGISTRY/$ECR_GATEWAY_REPOSITORY:latest"
-          echo "Image SHA: $ECR_REGISTRY/$ECR_GATEWAY_REPOSITORY:$IMAGE_TAG"
 
       - name: Deployment summary
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
         run: |
           echo ""
           echo "🎉 Stage 2 Build Complete - Both Images Pushed!"
           echo ""
           echo "vLLM Image:"
           echo "  - $ECR_REGISTRY/$ECR_VLLM_REPOSITORY:latest"
-          echo "  - $ECR_REGISTRY/$ECR_VLLM_REPOSITORY:$IMAGE_TAG"
           echo ""
           echo "Gateway Image:"
           echo "  - $ECR_REGISTRY/$ECR_GATEWAY_REPOSITORY:latest"
-          echo "  - $ECR_REGISTRY/$ECR_GATEWAY_REPOSITORY:$IMAGE_TAG"
+          echo ""
+          echo "Note: Only 'latest' tag pushed to minimize ECR storage costs"
+          echo "Cache layers stored separately as :buildcache tag"
           echo ""
           echo "To deploy on EC2:"
           echo "  poetry run python scripts/deploy.py --skip-start"
