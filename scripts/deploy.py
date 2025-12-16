@@ -201,8 +201,8 @@ def deploy_compose_stack_via_ssm(
     with open(compose_file, 'r', encoding='utf-8') as f:
         compose_content = f.read()
     
-    # Escape special characters for bash heredoc
-    compose_content_escaped = compose_content.replace('$', '\\$').replace('`', '\\`')
+    # No escaping needed - we'll use quoted heredoc delimiter 'COMPOSE_EOF'
+    # which treats content literally (no variable substitution)
     
     volume_name = config.config['docker']['volume_name']
     
@@ -244,7 +244,7 @@ def deploy_compose_stack_via_ssm(
         "echo '=== Writing docker-compose.yml ==='",
         "cd ~",  # Use ~ to work with any user
         "cat > docker-compose.yml << 'COMPOSE_EOF'",
-        compose_content_escaped,
+        compose_content,
         "COMPOSE_EOF",
         "",
         "echo '=== Retrieving Secrets ==='",
