@@ -103,7 +103,7 @@ jobs:
   build-and-push-gateway:
     name: Build Gateway image and push to ECR
     runs-on: ubuntu-latest
-    needs: build-and-push-vllm  # Sequential build to manage disk space
+    # Parallel build: runs simultaneously with vLLM (with cache, both complete in ~1 min)
     
     steps:
       - name: Checkout code
