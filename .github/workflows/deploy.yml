@@ -85,6 +85,7 @@ jobs:
             --cache-to type=registry,ref=$ECR_REGISTRY/$ECR_VLLM_REPOSITORY:buildcache,mode=max \
             --push \
             --progress=plain \
+            --provenance=false \
             .
           
           echo "Disk space after vLLM build:"
