@@ -222,7 +222,7 @@ def deploy_compose_stack_via_ssm(
             "cd ~",  # Use ~ instead of hardcoded path
             "",
             "# Stop and remove docker-compose stack (Stage 2 containers)",
-            "docker-compose down 2>/dev/null || echo 'No existing compose stack'",
+            "docker compose down 2>/dev/null || echo 'No existing compose stack'",
             "",
             "# Remove any standalone containers from Stage 1 deployment",
             "# (prevents container name conflicts)",
@@ -237,7 +237,7 @@ def deploy_compose_stack_via_ssm(
         f"aws ecr get-login-password --region {config.region} | "
         f"docker login --username AWS --password-stdin {config.ecr_registry} 2>&1 | grep -v 'WARNING'",
         "",
-        "echo '=== Pulling Docker Images ===",
+        "echo '=== Pulling Docker Images ==='",
         f"docker pull {config.ecr_registry}/{config.ecr_vllm_repository}:{image_tag}",
         f"docker pull {config.ecr_registry}/{config.ecr_gateway_repository}:{image_tag}",
         "",
@@ -252,18 +252,21 @@ def deploy_compose_stack_via_ssm(
         f"--secret-id {config.hf_token_secret_name} "
         f"--query SecretString --output text --region {config.region})",
         "",
-        "echo '=== Setting Environment Variables ===",
+        "echo '=== Setting Environment Variables ==='",
         f"export ECR_REGISTRY={config.ecr_registry}",
         "export HF_TOKEN=\"$HF_TOKEN\"",
         f"export CORS_ORIGINS=\"{config.config['gateway']['cors_origins']}\"",
         "echo 'Environment configured for Stage 2 deployment'",
         "",
-        "echo '=== Starting Docker Compose Stack ==='",
-        "docker-compose up -d",
+        "echo 'Current directory:' && pwd",
+        "echo 'docker-compose.yml exists:' && ls -la docker-compose.yml",
         "",
-        "echo '=== Verifying Stack Status ==='",
+        "echo '=== Starting Docker Compose Stack ===",
+        "docker compose up -d",
+        "",
+        "echo '=== Verifying Stack Status ===",
         "sleep 5",  # Brief wait for containers to initialize
-        "docker-compose ps",
+        "docker compose ps",
         "",
         "echo '=== Deployment Complete ==='",
         "echo 'vLLM server: http://localhost:8000'",
@@ -346,7 +349,7 @@ def validate_deployment(config: DeploymentConfig) -> bool:
     
     echo "=== Checking Docker Compose Stack ==="
     cd ~
-    docker-compose ps
+    docker compose ps
     
     # Check if both containers are running
     VLLM_RUNNING=$(docker ps --filter name=vllm-server --format '{{{{.Names}}}}')
@@ -405,7 +408,7 @@ def validate_deployment(config: DeploymentConfig) -> bool:
     
     echo "ERROR: Health checks failed"
     echo "=== Stack Status ==="
-    docker-compose ps
+    docker compose ps
     echo "=== vLLM Logs (last 200 lines) ==="
     docker logs vllm-server --tail 200
     echo "=== Gateway Logs (last 200 lines) ==="
