@@ -201,11 +201,10 @@ def deploy_compose_stack_via_ssm(
     with open(compose_file, 'r', encoding='utf-8') as f:
         compose_content = f.read()
     
-    # Escape only $ for bash variable substitution (keep single quotes as-is)
-    # Replace ${VAR} with \${VAR} to prevent bash from trying to expand them
-    import re
-    compose_content_escaped = re.sub(r'\$\{([^}]+)\}', r'${\1}', compose_content)
-    compose_content_escaped = compose_content_escaped.replace('$', '\\$')
+    # Use base64 encoding to safely transfer the file content
+    # This avoids all quote/escape issues with heredoc
+    import base64
+    compose_content_b64 = base64.b64encode(compose_content.encode('utf-8')).decode('ascii')
     
     volume_name = config.config['docker']['volume_name']
     
@@ -246,9 +245,7 @@ def deploy_compose_stack_via_ssm(
         "",
         "echo '=== Writing docker-compose.yml ==='",
         "cd ~",  # Use ~ to work with any user
-        "cat > docker-compose.yml << END_OF_COMPOSE_FILE",
-        compose_content_escaped,
-        "END_OF_COMPOSE_FILE",
+        f"echo '{compose_content_b64}' | base64 -d > docker-compose.yml",
         "",
         "echo '=== Retrieving Secrets ==='",
         f"HF_TOKEN=$(aws secretsmanager get-secret-value "
