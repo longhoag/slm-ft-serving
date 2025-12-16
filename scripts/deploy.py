@@ -219,7 +219,7 @@ def deploy_compose_stack_via_ssm(
     if force_redeploy:
         commands.extend([
             "echo '=== Cleaning Up Existing Containers ==='",
-            "cd /home/ec2-user",
+            "cd ~",  # Use ~ instead of hardcoded path
             "",
             "# Stop and remove docker-compose stack (Stage 2 containers)",
             "docker-compose down 2>/dev/null || echo 'No existing compose stack'",
@@ -242,7 +242,7 @@ def deploy_compose_stack_via_ssm(
         f"docker pull {config.ecr_registry}/{config.ecr_gateway_repository}:{image_tag}",
         "",
         "echo '=== Writing docker-compose.yml ==='",
-        "cd /home/ec2-user",
+        "cd ~",  # Use ~ to work with any user
         "cat > docker-compose.yml << 'COMPOSE_EOF'",
         compose_content_escaped,
         "COMPOSE_EOF",
@@ -345,7 +345,7 @@ def validate_deployment(config: DeploymentConfig) -> bool:
     #!/bin/bash
     
     echo "=== Checking Docker Compose Stack ==="
-    cd /home/ec2-user
+    cd ~
     docker-compose ps
     
     # Check if both containers are running
