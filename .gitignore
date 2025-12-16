@@ -24,7 +24,8 @@ wheels/
 *.egg
 
 # Poetry
-poetry.lock
+# Note: Keep poetry.lock tracked - required for reproducible gateway Docker builds
+# poetry.lock
 .venv/
 
 # IDEs
