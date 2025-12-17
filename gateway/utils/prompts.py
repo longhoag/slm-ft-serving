@@ -21,23 +21,12 @@ def medical_extraction_prompt(text: str, format_hint: bool = True) -> str:
         >>> print(prompt)
         Extract structured cancer information from this clinical text...
     """
-    base_prompt = f"""Extract structured cancer information from this clinical text. Identify the following fields if present:
+    # Simplified prompt format that matches the training data better
+    base_prompt = f"""Extract cancer information from this text and output as JSON with these fields: cancer_type, stage, gene_mutation, biomarker, treatment, response, metastasis_site.
 
-- cancer_type: The type of cancer (e.g., breast cancer, lung cancer, prostate cancer)
-- stage: Cancer stage (e.g., 1, 2, 3, 4, or descriptive like "early-stage")
-- gene_mutation: Specific genetic mutations (e.g., BRCA1, EGFR, KRAS)
-- biomarker: Biomarkers or molecular markers (e.g., HER2 positive, PD-L1)
-- treatment: Treatment approaches (e.g., chemotherapy, radiation, immunotherapy)
-- response: Treatment response or outcome (e.g., complete response, partial response)
-- metastasis_site: Sites of metastasis if mentioned (e.g., bone, liver, brain)
+Text: {text}
 
-Clinical Text:
-{text}
-
-Structured Data:"""
-
-    if format_hint:
-        base_prompt += '\n{"cancer_type": "", "stage": "", "gene_mutation": "", "biomarker": "", "treatment": "", "response": "", "metastasis_site": ""}'
+JSON:"""
 
     return base_prompt
 
