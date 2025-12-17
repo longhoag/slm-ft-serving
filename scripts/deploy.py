@@ -212,6 +212,9 @@ def deploy_compose_stack_via_ssm(
         "#!/bin/bash",
         "set -e",  # Exit on error
         "",
+        "# Set HOME explicitly for SSM shell environment",
+        "export HOME=${HOME:-/root}",
+        "",
         "echo '=== Docker Volume Setup ==='",
         f"docker volume create {volume_name} || true",
         f"echo 'Volume {volume_name} ready'",
@@ -351,8 +354,11 @@ def validate_deployment(config: DeploymentConfig) -> bool:
     health_check_cmd = f"""
     #!/bin/bash
     
+    # Set HOME explicitly for SSM shell environment
+    export HOME=${{HOME:-/root}}
+    
     echo "=== Checking Docker Compose Stack ==="
-    cd ~
+    cd $HOME
     docker compose ps
     
     # Check if both containers are running
