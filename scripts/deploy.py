@@ -214,17 +214,28 @@ def deploy_compose_stack_via_ssm(
         "",
         "# Set HOME explicitly for SSM shell environment",
         "export HOME=${HOME:-/root}",
+        "cd $HOME",
         "",
         "echo '=== Docker Volume Setup ==='",
         f"docker volume create {volume_name} || true",
         f"echo 'Volume {volume_name} ready'",
+        "",
+        "echo '=== Retrieving Secrets ==='",
+        f"HF_TOKEN=$(aws secretsmanager get-secret-value "
+        f"--secret-id {config.hf_token_secret_name} "
+        f"--query SecretString --output text --region {config.region})",
+        "",
+        "echo '=== Setting Environment Variables ==='",
+        f"export ECR_REGISTRY={config.ecr_registry}",
+        "export HF_TOKEN=\"$HF_TOKEN\"",
+        f"export CORS_ORIGINS=\"{config.config['gateway']['cors_origins']}\"",
+        "echo 'Environment configured for Stage 2 deployment'",
         "",
     ]
     
     if force_redeploy:
         commands.extend([
             "echo '=== Cleaning Up Existing Containers ==='",
-            "cd $HOME",  # Use $HOME for better shell compatibility
             "",
             "# Stop and remove docker-compose stack (Stage 2 containers)",
             "docker compose down 2>/dev/null || echo 'No existing compose stack'",
@@ -247,19 +258,7 @@ def deploy_compose_stack_via_ssm(
         f"docker pull {config.ecr_registry}/{config.ecr_gateway_repository}:{image_tag}",
         "",
         "echo '=== Writing docker-compose.yml ==='",
-        "cd $HOME",  # Use $HOME for better shell compatibility
         f"echo '{compose_content_b64}' | base64 -d > docker-compose.yml",
-        "",
-        "echo '=== Retrieving Secrets ==='",
-        f"HF_TOKEN=$(aws secretsmanager get-secret-value "
-        f"--secret-id {config.hf_token_secret_name} "
-        f"--query SecretString --output text --region {config.region})",
-        "",
-        "echo '=== Setting Environment Variables ==='",
-        f"export ECR_REGISTRY={config.ecr_registry}",
-        "export HF_TOKEN=\"$HF_TOKEN\"",
-        f"export CORS_ORIGINS=\"{config.config['gateway']['cors_origins']}\"",
-        "echo 'Environment configured for Stage 2 deployment'",
         "",
         "echo 'Current directory:' && pwd",
         "echo 'docker-compose.yml exists:' && ls -la docker-compose.yml",
