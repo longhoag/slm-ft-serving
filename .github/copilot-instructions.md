@@ -1,5 +1,19 @@
 # Copilot Instructions for slm-ft-serving
 
+## Repository Context
+**This is the BACKEND/SERVER repository** containing:
+- vLLM inference server (Llama 3.1 8B + medical-ie LoRA adapter)
+- FastAPI gateway with medical extraction API
+- Docker Compose orchestration
+- AWS deployment scripts (EC2, ECR, SSM)
+
+**Separate Frontend Repository**: Stage 3 frontend (React/Next.js on Vercel) is in a different repo but consumes this backend's API.
+
+**Cross-Repository Work**: 
+- Frontend changes may require backend API updates (new endpoints, response formats)
+- Backend API changes should be communicated to frontend repo
+- Both repos carry their own implementations and deployment logic
+
 ## Project Overview
 This project serves a fine-tuned Llama 3.1 8B model (qLoRA 4-bit quantization) specialized for medical cancer information extraction. The model uses a base model (`meta-llama/Llama-3.1-8B`) with custom adapters (`loghoag/llama-3.1-8b-medical-ie`) for structured entity extraction from clinical text.
 
@@ -125,6 +139,11 @@ Build a user-friendly web interface for medical information extraction, deployed
 **Repository**: New repo (this file will be copied there as `.github/copilot-instructions.md`)
 **Deployment**: Vercel (serverless Next.js)
 **Backend API**: Stage 2 FastAPI gateway at `http://<ec2-ip>:8080`
+
+**Important**: 
+- Frontend repo has its own codebase, deployment, and documentation
+- This backend repo may need updates based on frontend requirements (e.g., new API endpoints, CORS config, response format changes)
+- When working on frontend integration, check both repos for cross-repository dependencies
 
 ### Architecture
 ```
