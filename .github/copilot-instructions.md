@@ -4,12 +4,12 @@
 This project serves a fine-tuned Llama 3.1 8B model (qLoRA 4-bit quantization) specialized for medical cancer information extraction. The model uses a base model (`meta-llama/Llama-3.1-8B`) with custom adapters (`loghoag/llama-3.1-8b-medical-ie`) for structured entity extraction from clinical text.
 
 ## Architecture Philosophy
-**Staged Development**: This project follows a strict stage-by-stage build approach. Do NOT create files or infrastructure for future stages (2-4) when working on Stage 1. Each stage must be complete and tested before moving forward.
+**Staged Development**: This project follows a strict stage-by-stage build approach. Each stage must be complete and tested before moving forward.
 
 ### Current Stage Progression
-- **Stage 1** ✅ **COMPLETE**: vLLM server on EC2 g6.2xlarge (us-east-1)
-- **Stage 2** 🚧 **IN PROGRESS**: FastAPI gateway layer on same EC2 instance
-- **Stage 3** (Future): React/Next.js frontend on Vercel (separate repo)  
+- **Stage 1** ✅ **COMPLETE**: vLLM server with LoRA adapter on EC2 g6.2xlarge (us-east-1)
+- **Stage 2** ✅ **COMPLETE**: FastAPI gateway layer orchestrated via Docker Compose on same EC2 instance
+- **Stage 3** 🚧 **IN PROGRESS**: React/Next.js frontend on Vercel (separate repo)
 - **Stage 4** (Future): CloudWatch monitoring and observability
 
 ## Critical Model Serving Details
@@ -89,353 +89,264 @@ Commands must be "execute with precaution to errors" - implement failsafe measur
 - Model persistence on EBS via Docker named volumes
 - Health checks passing, inference validated
 - Structured medical entity extraction working correctly
+- Chat template added for `/v1/chat/completions` support
 
-### Stage 1 Known Limitation
-- `/v1/chat/completions` endpoint not available (requires chat template)
-- Currently using `/v1/completions` endpoint with raw prompts
-- **Fix deferred to Stage 2** (when implementing FastAPI gateway)
+## Stage 2 Completion Status
+✅ **COMPLETE** - FastAPI gateway successfully deployed and operational
+- FastAPI gateway running on port 8080 (external API)
+- vLLM server running on port 8000 (internal inference engine)
+- Docker Compose orchestration with health check dependencies
+- Medical extraction endpoint (`/api/v1/extract`) returning structured JSON
+- Input validation with Pydantic models
+- Proper error handling and HTTP status codes
+- Interactive API documentation at `/docs`
+- Deployment automation via `scripts/deploy.py`
+- GitHub Actions CI/CD for dual image builds (vLLM + gateway)
 
-## Stage 2: FastAPI Gateway Layer
+### Stage 2 Architecture
+```
+Client → FastAPI Gateway (port 8080) → vLLM Server (port 8000)
+         └─ Same EC2 instance (g6.2xlarge)
+         └─ Docker Compose orchestration
+         └─ Named volumes for model persistence
+```
+
+### Stage 2 Known Limitations
+- Non-medical text input may trigger LLM hallucinations in `raw_output` field
+  - Parsed structured fields correctly return null (low impact)
+  - Fix planned for post-Stage 3 hardening
+- CORS configured with wildcard (`*`) - should be restricted in production
+
+## Stage 3: React/Next.js Frontend
 
 ### Overview
-Build a FastAPI gateway that runs on the same EC2 instance as vLLM, providing:
-- Request validation and structured input/output
-- Medical entity extraction with proper prompt formatting
-- Rate limiting and error handling
-- Health checks and monitoring
-- Chat template support for vLLM
+Build a user-friendly web interface for medical information extraction, deployed on Vercel as a separate repository. The frontend will consume the FastAPI gateway API deployed in Stage 2.
+
+**Repository**: New repo (this file will be copied there as `.github/copilot-instructions.md`)
+**Deployment**: Vercel (serverless Next.js)
+**Backend API**: Stage 2 FastAPI gateway at `http://<ec2-ip>:8080`
 
 ### Architecture
 ```
-Client → FastAPI Gateway (port 8080) → vLLM Server (port 8000)
-         └─ Same EC2 instance
-         └─ Docker Compose orchestration
+User Browser → Next.js Frontend (Vercel) → FastAPI Gateway (EC2:8080) → vLLM (EC2:8000)
+               └─ Static generation + API routes
+               └─ Responsive React components
 ```
 
-### Implementation Steps
+### Key Requirements
 
-#### Step 1: Add Chat Template to vLLM (Enable /v1/chat/completions)
+**Frontend Features**:
+- Medical text input form with validation
+- Real-time extraction results display
+- Structured JSON output visualization
+- Example clinical texts for demo
+- Loading states and error handling
+- Responsive design (mobile + desktop)
+- Optional: History of past extractions (client-side storage)
 
-**1.1 Create `chat_template.jinja`** in project root:
-```jinja
-{{- bos_token }}
-{%- if messages[0]['role'] == 'system' %}
-    {%- set system_message = messages[0]['content'] %}
-    {%- set loop_messages = messages[1:] %}
-{%- else %}
-    {%- set loop_messages = messages %}
-{%- endif %}
-{%- if system_message is defined %}
-    {{- '<|start_header_id|>system<|end_header_id|>\n\n' + system_message + '<|eot_id|>' }}
-{%- endif %}
-{%- for message in loop_messages %}
-    {%- if message['role'] == 'user' %}
-        {{- '<|start_header_id|>user<|end_header_id|>\n\n' + message['content'] + '<|eot_id|>' }}
-    {%- elif message['role'] == 'assistant' %}
-        {{- '<|start_header_id|>assistant<|end_header_id|>\n\n' + message['content'] + '<|eot_id|>' }}
-    {%- endif %}
-{%- endfor %}
-{%- if add_generation_prompt %}
-    {{- '<|start_header_id|>assistant<|end_header_id|>\n\n' }}
-{%- endif %}
+**Technical Stack**:
+- Next.js 14+ (App Router)
+- React 18+
+- TypeScript
+- TailwindCSS for styling
+- ShadcnUI or similar component library
+- Vercel deployment
+
+**API Integration**:
+- HTTP client (fetch or axios) to call `/api/v1/extract`
+- Proper CORS handling
+- Request/response type definitions matching Stage 2 API
+- Error boundary for API failures
+
+**Environment Variables** (Vercel):
+```env
+NEXT_PUBLIC_API_BASE_URL=http://<ec2-ip>:8080
 ```
 
-**1.2 Update Dockerfile** - Add after `WORKDIR /app`:
-```dockerfile
-# Copy chat template for Llama 3.1 (required for chat completions API)
-COPY chat_template.jinja /app/chat_template.jinja
-```
+### Implementation Priorities
 
-**1.3 Update Dockerfile CMD** - Add `--chat-template` flag:
-```dockerfile
-CMD ["sh", "-c", "vllm serve $MODEL_NAME --enable-lora --lora-modules medical-ie=$ADAPTER_NAME --tensor-parallel-size $TENSOR_PARALLEL_SIZE --host $HOST --port $PORT --trust-remote-code --disable-log-requests --max-model-len 8192 --max-num-seqs 32 --gpu-memory-utilization 0.90 --chat-template /app/chat_template.jinja"]
-```
+1. **Create Next.js project** with TypeScript and TailwindCSS
+2. **Design UI components**:
+   - Input form for clinical text
+   - Results display with structured fields
+   - Loading spinner and error states
+3. **Implement API client** to call extraction endpoint
+4. **Add example texts** for user testing
+5. **Deploy to Vercel** with environment variables
+6. **Test end-to-end** workflow
 
-**1.4 Rebuild and deploy vLLM:**
-```bash
-git add chat_template.jinja Dockerfile
-git commit -m "Add Llama 3.1 chat template for vLLM"
-git push
-# Wait for GitHub Actions to build
-poetry run python scripts/deploy.py --skip-start
-```
+### Stage 3 Success Criteria
+- ⏳ Next.js app deployed on Vercel
+- ⏳ Medical text input form functional
+- ⏳ Extraction results displayed in structured format
+- ⏳ Error handling for API failures
+- ⏳ Responsive design working on mobile/desktop
+- ⏳ Example clinical texts available
+- ⏳ CORS properly configured between Vercel and EC2
 
-#### Step 2: Create FastAPI Gateway Application
+### Stage 3 Considerations
 
-**2.1 Project structure:**
-```
-gateway/
-├── __init__.py
-├── main.py              # FastAPI app entry point
-├── models.py            # Pydantic models for request/response
-├── services/
-│   ├── __init__.py
-│   └── vllm_client.py   # vLLM HTTP client wrapper
-├── routers/
-│   ├── __init__.py
-│   ├── health.py        # Health check endpoints
-│   └── extraction.py    # Medical IE endpoints
-└── utils/
-    ├── __init__.py
-    ├── prompts.py       # Prompt templates for medical IE
-    └── parsers.py       # Response parsing logic
-```
+**CORS Configuration**:
+- Update Stage 2 `config/deployment.yml` to whitelist Vercel domain
+- Change from `cors_origins: "*"` to specific Vercel URL
+- Test OPTIONS preflight requests
 
-**2.2 Core dependencies (add to pyproject.toml):**
-```toml
-[tool.poetry.dependencies]
-fastapi = "^0.115.0"
-uvicorn = {extras = ["standard"], version = "^0.32.0"}
-pydantic = "^2.9.0"
-httpx = "^0.27.0"
-python-multipart = "^0.0.12"
-pydantic-settings = "^2.6.0"
-```
+**Performance**:
+- Consider adding loading states (extraction takes ~2-3 seconds)
+- Implement debouncing for input changes
+- Show token usage and response time metrics
 
-**2.3 Key files to implement:**
+**Security**:
+- Never expose EC2 IP directly in frontend (consider API route proxy)
+- Validate inputs on both frontend and backend
+- Rate limit considerations for public-facing app
 
-**gateway/models.py** - Request/response schemas:
-```python
-from pydantic import BaseModel, Field
-from typing import Optional, List
-
-class MedicalExtractionRequest(BaseModel):
-    text: str = Field(..., description="Clinical text to extract information from")
-    temperature: float = Field(default=0.3, ge=0.0, le=2.0)
-    max_tokens: int = Field(default=512, ge=1, le=8192)
-
-class MedicalExtractionResponse(BaseModel):
-    cancer_type: Optional[str] = None
-    stage: Optional[str] = None
-    gene_mutation: Optional[str] = None
-    biomarker: Optional[str] = None
-    treatment: Optional[str] = None
-    response: Optional[str] = None
-    metastasis_site: Optional[str] = None
-    raw_output: str = Field(..., description="Raw model output")
-    tokens_used: int
-```
-
-**gateway/services/vllm_client.py** - vLLM client:
-```python
-import httpx
-from loguru import logger
-
-class VLLMClient:
-    def __init__(self, base_url: str = "http://localhost:8000"):
-        self.base_url = base_url
-        self.client = httpx.AsyncClient(timeout=60.0)
-    
-    async def health_check(self) -> bool:
-        try:
-            response = await self.client.get(f"{self.base_url}/health")
-            return response.status_code == 200
-        except Exception as e:
-            logger.error(f"vLLM health check failed: {e}")
-            return False
-    
-    async def completions(self, model: str, prompt: str, max_tokens: int, temperature: float):
-        response = await self.client.post(
-            f"{self.base_url}/v1/completions",
-            json={
-                "model": model,
-                "prompt": prompt,
-                "max_tokens": max_tokens,
-                "temperature": temperature
-            }
-        )
-        response.raise_for_status()
-        return response.json()
-```
-
-**gateway/utils/prompts.py** - Prompt templates:
-```python
-def medical_extraction_prompt(text: str) -> str:
-    return f"""Extract structured cancer information (cancer_type, stage, gene_mutation, biomarker, treatment, response, metastasis_site) from this text:
-
-{text}
-
-Structured Data:"""
-```
-
-**gateway/routers/extraction.py** - Extraction endpoint:
-```python
-from fastapi import APIRouter, HTTPException
-from gateway.models import MedicalExtractionRequest, MedicalExtractionResponse
-from gateway.services.vllm_client import VLLMClient
-from gateway.utils.prompts import medical_extraction_prompt
-from gateway.utils.parsers import parse_medical_output
-
-router = APIRouter(prefix="/api/v1", tags=["extraction"])
-vllm_client = VLLMClient()
-
-@router.post("/extract", response_model=MedicalExtractionResponse)
-async def extract_medical_info(request: MedicalExtractionRequest):
-    prompt = medical_extraction_prompt(request.text)
-    
-    result = await vllm_client.completions(
-        model="medical-ie",
-        prompt=prompt,
-        max_tokens=request.max_tokens,
-        temperature=request.temperature
-    )
-    
-    raw_text = result["choices"][0]["text"]
-    parsed = parse_medical_output(raw_text)
-    
-    return MedicalExtractionResponse(
-        **parsed,
-        raw_output=raw_text,
-        tokens_used=result["usage"]["total_tokens"]
-    )
-```
-
-#### Step 3: Dockerize FastAPI Gateway
-
-**3.1 Create `gateway/Dockerfile`:**
-```dockerfile
-FROM python:3.11-slim
-
-WORKDIR /app
-
-# Install Poetry
-RUN pip install poetry
-
-# Copy dependency files
-COPY pyproject.toml poetry.lock ./
-
-# Install dependencies (no dev dependencies in production)
-RUN poetry config virtualenvs.create false \
-    && poetry install --no-dev --no-interaction --no-ansi
-
-# Copy application code
-COPY gateway/ ./gateway/
-
-# Expose gateway port
-EXPOSE 8080
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
-
-# Run FastAPI with uvicorn
-CMD ["uvicorn", "gateway.main:app", "--host", "0.0.0.0", "--port", "8080"]
-```
-
-#### Step 4: Docker Compose Orchestration
-
-**4.1 Create `docker-compose.yml`:**
-```yaml
-version: '3.8'
-
-services:
-  vllm:
-    image: ${ECR_REGISTRY}/slm-ft-serving-vllm:latest
-    container_name: vllm-server
-    ports:
-      - "8000:8000"
-    volumes:
-      - huggingface-cache:/root/.cache/huggingface
-    environment:
-      - HF_TOKEN=${HF_TOKEN}
-      - MODEL_NAME=meta-llama/Llama-3.1-8B
-      - ADAPTER_NAME=loghoag/llama-3.1-8b-medical-ie
-      - PORT=8000
-      - HOST=0.0.0.0
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 120s
-
-  gateway:
-    image: ${ECR_REGISTRY}/slm-ft-serving-gateway:latest
-    container_name: fastapi-gateway
-    ports:
-      - "8080:8080"
-    environment:
-      - VLLM_BASE_URL=http://vllm:8000
-    depends_on:
-      vllm:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-
-volumes:
-  huggingface-cache:
-    external: true
-```
-
-#### Step 5: Update Deployment Scripts
-
-**5.1 Update `scripts/deploy.py`:**
-- Add logic to deploy docker-compose stack
-- Pull both vLLM and gateway images
-- Use `docker-compose up -d` instead of `docker run`
-- Wait for both services to be healthy
-
-**5.2 Update GitHub Actions:**
-- Add second build job for gateway image
-- Push both images to ECR with same tag
-- Trigger on changes to gateway/ directory
-
-#### Step 6: Testing and Validation
-
-**6.1 Local testing:**
-```bash
-# Test gateway health
-curl http://<ec2-ip>:8080/health
-
-# Test extraction endpoint
-curl http://<ec2-ip>:8080/api/v1/extract \
-  -H "Content-Type: application/json" \
-  -d '{
-    "text": "Patient diagnosed with stage 3 breast cancer with HER2 positive marker."
-  }'
-```
-
-**6.2 Create `scripts/test_gateway.py`:**
-- Automated tests for gateway endpoints
-- Validate structured output parsing
-- Test error handling and rate limiting
-
-#### Step 7: Documentation
-
-**7.1 Create `docs/STAGE-2-GATEWAY.md`:**
-- Gateway API documentation
-- Request/response examples
-- Deployment instructions
-- Troubleshooting guide
-
-### Stage 2 Success Criteria
-- ✅ Chat template added to vLLM (chat completions working)
-- ✅ FastAPI gateway running on port 8080
-- ✅ Medical extraction endpoint returns structured JSON
-- ✅ Docker Compose orchestrates both services
-- ✅ Health checks passing for both containers
-- ✅ Gateway waits for vLLM readiness
-- ✅ Deployment script updated for compose stack
-- ✅ Tests passing for gateway endpoints
+### Post-Stage 3 Enhancements
+- User authentication (if needed)
+- Extraction history with persistent storage
+- Batch processing for multiple texts
+- Download results as JSON/CSV
+- Confidence scores for extractions
 
 ## Future Stages
 
-**Stage 3 Preview** (Frontend):
-- React/Next.js on Vercel (separate repo)
-- Route53 DNS → ALB → EC2
+**Stage 4 Preview** (Observability & Monitoring):
+- CloudWatch dashboard for GPU metrics
+- Container logs aggregation
+- API request/response monitoring
+- Cost tracking and alerts
+- Performance metrics (latency, throughput)
+- Error rate monitoring
 
-**Stage 4 Preview** (Observability):
-- CloudWatch GPU metrics
-- vLLM container logs
-- Dashboarding
+**Stage 4 Tools**:
+- CloudWatch Logs for centralized logging
+- CloudWatch Metrics for GPU utilization
+- CloudWatch Alarms for anomaly detection
+- Optional: Grafana for advanced dashboarding
+- Optional: Sentry for frontend error tracking
+
+## Backend API Reference (for Stage 3 Frontend)
+
+The Stage 2 backend provides the following endpoints:
+
+### Health Check
+```bash
+GET /health
+Response: {"status":"healthy","vllm_available":true,"version":"0.1.0"}
+```
+
+### Medical Extraction
+```bash
+POST /api/v1/extract
+Content-Type: application/json
+
+Request Body:
+{
+  "text": "Patient diagnosed with stage 3 breast cancer with HER2 positive marker.",
+  "temperature": 0.3,  // Optional: 0.0-2.0, default 0.3
+  "max_tokens": 512    // Optional: 1-8192, default 512
+}
+
+Response (200 OK):
+{
+  "cancer_type": "breast cancer",
+  "stage": "3",
+  "gene_mutation": null,
+  "biomarker": "HER2 positive",
+  "treatment": null,
+  "response": null,
+  "metastasis_site": null,
+  "raw_output": "{...}",  // Raw model JSON output
+  "tokens_used": 116
+}
+
+Error Response (422 Unprocessable Entity):
+{
+  "detail": [
+    {
+      "type": "string_too_short",
+      "loc": ["body", "text"],
+      "msg": "String should have at least 1 character",
+      "input": "",
+      "ctx": {"min_length": 1}
+    }
+  ]
+}
+```
+
+### API Documentation
+```bash
+GET /docs  # Interactive Swagger UI
+GET /redoc  # ReDoc documentation
+```
+
+## Project Context for Stage 3
+
+**What's Already Working**:
+- ✅ vLLM server serving Llama 3.1 8B + medical-ie LoRA adapter
+- ✅ FastAPI gateway with structured extraction endpoint
+- ✅ Docker Compose orchestration on EC2
+- ✅ Health checks and error handling
+- ✅ Input validation (empty text, parameter ranges)
+- ✅ Structured JSON output for 7 medical fields
+
+**Known Backend Limitations** (to be aware of in frontend):
+- Non-medical text may produce hallucinated content in `raw_output`
+  - Structured fields will correctly return null
+  - Frontend should handle all-null responses gracefully
+- CORS currently set to wildcard (`*`)
+  - Will be restricted to Vercel domain once deployed
+- Response time: ~2-3 seconds for typical clinical text
+  - Frontend should show loading indicator
+
+**EC2 Instance Details**:
+- Instance Type: g6.2xlarge (1x L4 GPU)
+- Region: us-east-1
+- OS: Amazon Linux 2023
+- Access: SSM only (no SSH)
+- Ports: 8000 (vLLM), 8080 (Gateway)
+
+**Cost Considerations**:
+- EC2 instance: ~$1.00/hour when running
+- Instance can be stopped when not in use
+- Vercel: Free tier for personal projects
+- Consider implementing auto-stop after inactivity
+
+## Development Workflow (All Stages)
+
+### Local Development
+1. Make changes to code
+2. Test locally if possible
+3. Commit and push to trigger GitHub Actions
+
+### Deployment (Stage 1-2 Backend)
+1. GitHub Actions builds Docker images
+2. Images pushed to ECR
+3. Run `poetry run python scripts/deploy.py` to deploy to EC2
+4. Validate with health checks and API tests
+
+### Deployment (Stage 3 Frontend)
+1. Push to GitHub (main branch)
+2. Vercel auto-deploys from GitHub
+3. Test production URL
+4. Monitor Vercel logs for errors
+
+## Troubleshooting
+
+### Backend (Stage 1-2)
+- Check CloudWatch logs: `/aws/ssm/slm-ft-serving/commands`
+- SSH alternative: Use SSM Session Manager
+- Container logs: `docker logs vllm-server` or `docker logs fastapi-gateway`
+- Health checks: `curl http://<ec2-ip>:8080/health`
+
+### Frontend (Stage 3)
+- Check Vercel deployment logs
+- Verify CORS configuration if seeing network errors
+- Check browser console for JavaScript errors
+- Verify API endpoint is accessible from browser
+
+### Common Issues
+1. **CORS errors**: Update Stage 2 CORS config with Vercel domain
+2. **Slow responses**: Normal for LLM inference (2-3s)
+3. **Connection timeout**: Check EC2 security group allows port 8080
+4. **Empty results**: Non-medical text returns null fields (expected)
