@@ -94,7 +94,7 @@ curl http://<EC2-IP>:8080/health/vllm
 
 ```bash
 # Test vLLM server directly
-curl http://<EC2-IP>:8000/health
+curl -v http://<EC2-IP>:8000/health
 
 # Expected response: (empty body with HTTP 200)
 ```
