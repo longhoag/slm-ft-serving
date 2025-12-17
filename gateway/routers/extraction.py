@@ -54,7 +54,7 @@ async def extract_medical_info(request: MedicalExtractionRequest) -> MedicalExtr
             max_tokens=request.max_tokens,
             temperature=request.temperature,
             # Stop sequences to prevent redundant output (removed aggressive stops)
-            stop=[\"Instruction:\", \"Input:\", \"###\", \"Clinical Text:\"],
+            stop=["Instruction:", "Input:", "###", "Clinical Text:"],
             top_p=0.95
         )
         logger.debug(f"vLLM returned {result['usage']['total_tokens']} tokens")
