@@ -60,7 +60,7 @@ services:
     ports:
       - "8080:8080"  # External API port
     environment:
-      # CORS configuration (allow all for Stage 2, restrict in Stage 3)
+      # CORS configuration (restricted to Vercel domains for Stage 3)
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       
       # vLLM backend URL (Docker network internal address)

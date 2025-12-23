@@ -30,7 +30,8 @@ vllm:
 
 gateway:
   api_port: 8080
-  cors_origins: "*"  # Stage 2: Allow all for testing, restrict in Stage 3
+  # CORS origins: Comma-separated list for production + preview deployments
+  cors_origins: "https://medical-extraction.vercel.app,https://*.vercel.app"
   
 docker:
   # Container names managed by docker-compose (vllm-server, fastapi-gateway)
