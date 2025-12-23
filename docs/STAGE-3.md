@@ -37,7 +37,7 @@ gateway:
   cors_origins: "https://medical-extraction.vercel.app,https://*.vercel.app"
 ```
 
-**2. docker-compose.yml**
+**2. docker-compose.yml** 
 ```yaml
 environment:
   # CORS configuration (restricted to Vercel domains for Stage 3)
