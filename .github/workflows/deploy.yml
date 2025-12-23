@@ -27,9 +27,7 @@ jobs:
   build-and-push-vllm:
     name: Build vLLM image and push to ECR
     runs-on: ubuntu-latest
-    environment:
-      name: production
-      url: http://52.90.91.216:8000
+    environment: production
     
     steps:
       - name: Checkout code
@@ -108,7 +106,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: https://medical-extraction.vercel.app
+      url: https://medical-extraction.vercel.app  # Stable URL, doesn't change
     # Parallel build: runs simultaneously with vLLM (with cache, both complete in ~1 min)
     
     steps:
