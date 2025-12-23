@@ -23,7 +23,7 @@ This project serves a fine-tuned Llama 3.1 8B model (qLoRA 4-bit quantization) s
 ### Current Stage Progression
 - **Stage 1** ✅ **COMPLETE**: vLLM server with LoRA adapter on EC2 g6.2xlarge (us-east-1)
 - **Stage 2** ✅ **COMPLETE**: FastAPI gateway layer orchestrated via Docker Compose on same EC2 instance
-- **Stage 3** 🚧 **IN PROGRESS**: React/Next.js frontend on Vercel (separate repo)
+- **Stage 3** ✅ **COMPLETE**: Next.js frontend on Vercel (separate repo) - [Live Demo](https://medical-extraction.vercel.app)
 - **Stage 4** (Future): CloudWatch monitoring and observability
 
 ## Critical Model Serving Details
@@ -129,16 +129,20 @@ Client → FastAPI Gateway (port 8080) → vLLM Server (port 8000)
 - Non-medical text input may trigger LLM hallucinations in `raw_output` field
   - Parsed structured fields correctly return null (low impact)
   - Fix planned for post-Stage 3 hardening
-- CORS configured with wildcard (`*`) - should be restricted in production
+- CORS restricted to Vercel domains (`https://medical-extraction.vercel.app`, `https://*.vercel.app`)
+  - Currently allows all methods and headers (hardening planned post-Stage 3)
 
-## Stage 3: React/Next.js Frontend
+## Stage 3 Completion Status
+✅ **COMPLETE** - Next.js frontend successfully deployed on Vercel
+
+**Live Application**: [https://medical-extraction.vercel.app](https://medical-extraction.vercel.app)
+
+**Repository**: Separate frontend repo
+**Deployment**: Vercel (auto-deploy from main branch)
+**Backend Integration**: FastAPI gateway at EC2:8080 (proxied via Next.js API routes)
 
 ### Overview
-Build a user-friendly web interface for medical information extraction, deployed on Vercel as a separate repository. The frontend will consume the FastAPI gateway API deployed in Stage 2.
-
-**Repository**: New repo (this file will be copied there as `.github/copilot-instructions.md`)
-**Deployment**: Vercel (serverless Next.js)
-**Backend API**: Stage 2 FastAPI gateway at `http://<ec2-ip>:8080`
+User-friendly web interface for medical information extraction, deployed on Vercel as a separate repository. The frontend consumes the FastAPI gateway API deployed in Stage 2.
 
 **Important**: 
 - Frontend repo has its own codebase, deployment, and documentation
@@ -163,62 +167,65 @@ User Browser → Next.js Frontend (Vercel) → FastAPI Gateway (EC2:8080) → vL
 - Responsive design (mobile + desktop)
 - Optional: History of past extractions (client-side storage)
 
-**Technical Stack**:
-- Next.js 14+ (App Router)
+**Technical Stack** (Implemented):
+- Next.js 16 (App Router)
 - React 18+
-- TypeScript
-- TailwindCSS for styling
-- ShadcnUI or similar component library
-- Vercel deployment
+- TypeScript (strict mode)
+- TailwindCSS v4
+- ShadcnUI (Radix primitives)
+- Vercel deployment with auto-deploy
 
-**API Integration**:
-- HTTP client (fetch or axios) to call `/api/v1/extract`
-- Proper CORS handling
-- Request/response type definitions matching Stage 2 API
-- Error boundary for API failures
+**API Integration** (Implemented):
+- Server-side API proxy routes (`/api/extract`, `/api/health`)
+- Backend IP hidden from browser (server-only `BACKEND_API_URL`)
+- Full TypeScript types matching Stage 2 API
+- Proper error handling and loading states
 
 **Environment Variables** (Vercel):
 ```env
-NEXT_PUBLIC_API_BASE_URL=http://<ec2-ip>:8080
+BACKEND_API_URL=http://<ec2-ip>:8080  # Server-only, no NEXT_PUBLIC_ prefix
 ```
 
-### Implementation Priorities
+### Implemented Features
 
-1. **Create Next.js project** with TypeScript and TailwindCSS
-2. **Design UI components**:
-   - Input form for clinical text
-   - Results display with structured fields
-   - Loading spinner and error states
-3. **Implement API client** to call extraction endpoint
-4. **Add example texts** for user testing
-5. **Deploy to Vercel** with environment variables
-6. **Test end-to-end** workflow
+1. ✅ **Next.js 16 project** with TypeScript strict mode and TailwindCSS v4
+2. ✅ **UI components** with ShadcnUI:
+   - Clinical text input form with validation
+   - Structured results display grid (7 fields)
+   - Loading states and error boundaries
+3. ✅ **API proxy routes** for secure backend communication
+4. ✅ **Example clinical texts** for user testing
+5. ✅ **Vercel deployment** with auto-deploy from main branch
+6. ✅ **End-to-end workflow** tested and validated
 
 ### Stage 3 Success Criteria
-- ⏳ Next.js app deployed on Vercel
-- ⏳ Medical text input form functional
-- ⏳ Extraction results displayed in structured format
-- ⏳ Error handling for API failures
-- ⏳ Responsive design working on mobile/desktop
-- ⏳ Example clinical texts available
-- ⏳ CORS properly configured between Vercel and EC2
+- ✅ Next.js 16 app deployed on Vercel with auto-deploy
+- ✅ Medical text input form functional with validation
+- ✅ Extraction results displayed in structured format (7 fields)
+- ✅ Error handling for API failures
+- ✅ Responsive design working on mobile/desktop
+- ✅ Example clinical texts available
+- ✅ CORS properly configured between Vercel and EC2
+- ✅ Backend API proxied via Next.js API routes (EC2 IP hidden)
+- ✅ TypeScript strict mode with full type coverage
+- ✅ TailwindCSS v4 + ShadcnUI components
 
-### Stage 3 Considerations
+### Stage 3 Implementation Notes
 
-**CORS Configuration**:
-- Update Stage 2 `config/deployment.yml` to whitelist Vercel domain
-- Change from `cors_origins: "*"` to specific Vercel URL
-- Test OPTIONS preflight requests
+**CORS Configuration** (Completed):
+- ✅ Backend `config/deployment.yml` updated with Vercel domains
+- ✅ CORS origins: `https://medical-extraction.vercel.app`, `https://*.vercel.app`
+- ✅ OPTIONS preflight requests working correctly
 
-**Performance**:
-- Consider adding loading states (extraction takes ~2-3 seconds)
-- Implement debouncing for input changes
-- Show token usage and response time metrics
+**Performance** (Implemented):
+- ✅ Loading states for ~2-3 second extraction time
+- ✅ Token usage displayed in results
+- ✅ Responsive UI with immediate feedback
 
-**Security**:
-- Never expose EC2 IP directly in frontend (consider API route proxy)
-- Validate inputs on both frontend and backend
-- Rate limit considerations for public-facing app
+**Security** (Implemented):
+- ✅ EC2 IP hidden via server-side Next.js API routes
+- ✅ Input validation on both frontend and backend
+- ⚠️ Rate limiting not yet implemented (future enhancement)
 
 ### Post-Stage 3 Enhancements
 - User authentication (if needed)
@@ -309,14 +316,14 @@ GET /redoc  # ReDoc documentation
 - ✅ Input validation (empty text, parameter ranges)
 - ✅ Structured JSON output for 7 medical fields
 
-**Known Backend Limitations** (to be aware of in frontend):
+**Known Backend Limitations**:
 - Non-medical text may produce hallucinated content in `raw_output`
-  - Structured fields will correctly return null
-  - Frontend should handle all-null responses gracefully
-- CORS currently set to wildcard (`*`)
-  - Will be restricted to Vercel domain once deployed
+  - Structured fields correctly return null
+  - Frontend handles all-null responses gracefully
+- CORS restricted to Vercel domains (production + previews)
+  - Currently allows all methods/headers (hardening planned)
 - Response time: ~2-3 seconds for typical clinical text
-  - Frontend should show loading indicator
+  - Frontend shows loading indicator during processing
 
 **EC2 Instance Details**:
 - Instance Type: g6.2xlarge (1x L4 GPU)
