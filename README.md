@@ -159,43 +159,72 @@ The model extracts **7 structured fields**:
 | **Deployment** | Vercel (serverless) |
 | **State Management** | React Hooks |
 
+
 ---
 
-## �� Stage Details
+## 🔧 Backend Deep Dive
 
-### Stage 1: vLLM Inference Server
+### vLLM Inference Server
 
-**Status**: ✅ Complete
+The core inference engine uses [vLLM](https://github.com/vllm-project/vllm) for high-performance LLM serving with optimized GPU utilization.
 
-**Deliverables**:
-- Docker image with vLLM + Llama 3.1 8B + medical-ie LoRA adapter
-- EC2 g6.2xlarge deployment (L4 GPU, 80 GiB EBS)
-- Model persistence via Docker named volumes
-- Health checks and inference validation
-- Remote deployment via SSM (no SSH)
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    vLLM Server (Port 8000)                  │
+│                                                             │
+│  ┌─────────────────┐    ┌─────────────────────────────────┐ │
+│  │  Base Model     │    │  LoRA Adapter                   │ │
+│  │  Llama 3.1 8B   │───▶│  medical-ie (71.8 MB)           │ │
+│  │  (32.1 GB)      │    │  Fine-tuned for cancer IE       │ │
+│  └─────────────────┘    └─────────────────────────────────┘ │
+│           │                                                 │
+│           ▼                                                 │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │  NVIDIA L4 GPU (24GB VRAM)                              ││
+│  │  • Continuous batching for throughput                   ││
+│  │  • PagedAttention for memory efficiency                 ││
+│  │  • OpenAI-compatible API (/v1/chat/completions)         ││
+│  └─────────────────────────────────────────────────────────┘│
+│                                                             │
+│  Model Cache: Docker volume on EBS (persists across runs)  │
+└─────────────────────────────────────────────────────────────┘
+```
 
-**Infrastructure**:
-- Instance: EC2 g6.2xlarge (us-east-1)
-- Storage: 80 GiB EBS root volume
-- GPU: 1x NVIDIA L4 (24GB VRAM)
-- Access: SSM only (no \`.pem\` keys)
+**Key Features**:
+- **LoRA Hot-Loading**: Adapter loaded at runtime without modifying base model
+- **Model Persistence**: HuggingFace cache stored in Docker named volume
+- **Health Endpoint**: `/health` returns status for container orchestration
+- **Chat Template**: Custom Jinja template for instruction-following format
 
-### Stage 2: FastAPI Gateway
+### FastAPI Gateway
 
-**Status**: ✅ Complete
+Lightweight API layer that handles request validation, CORS, and response formatting.
 
-**Deliverables**:
-- FastAPI gateway with REST API endpoints
-- Docker Compose orchestration (vLLM + Gateway)
-- Medical extraction endpoint (\`/api/v1/extract\`)
-- Input validation with Pydantic models
-- CORS configuration for Vercel domains
-- Interactive API documentation (\`/docs\`)
-- Dual GitHub Actions workflow (parallel builds)
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  FastAPI Gateway (Port 8080)                │
+│                                                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
+│  │  /health     │  │  /docs       │  │  /api/v1/extract │  │
+│  │  Health check│  │  Swagger UI  │  │  Main endpoint   │  │
+│  └──────────────┘  └──────────────┘  └────────┬─────────┘  │
+│                                               │            │
+│  ┌────────────────────────────────────────────▼─────────┐  │
+│  │  Request Processing Pipeline                         │  │
+│  │  1. Pydantic validation (text, temperature, tokens)  │  │
+│  │  2. Prompt construction (instruction + input format) │  │
+│  │  3. vLLM API call (OpenAI-compatible)                │  │
+│  │  4. JSON parsing of model output                     │  │
+│  │  5. Structured response (7 medical fields)           │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                             │
+│  CORS: Restricted to Vercel domains (production + preview) │
+└─────────────────────────────────────────────────────────────┘
+```
 
 **API Endpoints**:
 
-\`\`\`bash
+```bash
 # Health check
 GET /health
 Response: {"status": "healthy", "vllm_available": true, "version": "0.1.0"}
@@ -208,56 +237,130 @@ Body: {
   "temperature": 0.3,  // optional: 0.0-2.0
   "max_tokens": 512    // optional: 1-8192
 }
-\`\`\`
+```
 
-### Stage 3: Next.js Frontend
+### Container Orchestration
 
-**Status**: ✅ Complete
+Docker Compose manages the multi-container deployment with health check dependencies.
 
-**Live Application**: [https://medical-extraction.vercel.app](https://medical-extraction.vercel.app)
+```yaml
+# Simplified docker-compose.yml structure
+services:
+  vllm:
+    image: ${ECR_REGISTRY}/slm-ft-serving-vllm:latest
+    ports: ["8000:8000"]
+    volumes: [huggingface-cache:/root/.cache/huggingface]
+    deploy:
+      resources:
+        reservations:
+          devices: [driver: nvidia, count: all, capabilities: [gpu]]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      start_period: 360s  # 6 min for model loading
 
-**Repository**: [slm-ft-serving-frontend](https://github.com/longhoag/slm-ft-serving-frontend)
+  gateway:
+    image: ${ECR_REGISTRY}/slm-ft-serving-gateway:latest
+    ports: ["8080:8080"]
+    environment: [VLLM_BASE_URL=http://vllm:8000]
+    depends_on:
+      vllm:
+        condition: service_healthy  # Wait for vLLM ready
+```
 
-**Features**:
-- Medical text input form with validation
-- Real-time extraction results (2-3 second response)
-- Structured display of 7 extracted fields
-- Example clinical texts for testing
-- Responsive design (mobile + desktop)
-- Server-side API proxy (EC2 IP hidden from browser)
-- Loading states and error handling
-- TypeScript strict mode with full type coverage
+**Container Communication**:
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Docker Network (slm-network)             │
+│                                                             │
+│   ┌─────────────┐    HTTP (internal)    ┌─────────────┐    │
+│   │   Gateway   │ ──────────────────▶   │    vLLM     │    │
+│   │  :8080      │   vllm:8000           │   :8000     │    │
+│   └──────┬──────┘                       └─────────────┘    │
+│          │                                                  │
+└──────────┼──────────────────────────────────────────────────┘
+           │ External (host network)
+           ▼
+    Client requests to EC2:8080
+```
 
-**Frontend Architecture**:
-\`\`\`
-src/
-├── app/
-│   ├── api/
-│   │   ├── extract/route.ts   # Proxy to backend
-│   │   └── health/route.ts    # Health check proxy
-│   ├── layout.tsx             # Root layout
-│   └── page.tsx               # Main extraction form
-├── components/
-│   ├── ui/                    # ShadcnUI components
-│   ├── extraction-form.tsx    # Input form
-│   └── extraction-results.tsx # Results display
-└── types/
-    └── api.ts                 # TypeScript interfaces
-\`\`\`
+### CI/CD Pipeline
 
-### Stage 4: Future Monitoring
+GitHub Actions automates Docker image builds with parallel execution and ECR caching.
 
-**Status**: 🔮 Planned
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  GitHub Actions Workflow                    │
+│                  (Triggered on push to main)                │
+└─────────────────────────┬───────────────────────────────────┘
+                          │
+          ┌───────────────┴───────────────┐
+          │                               │
+          ▼                               ▼
+┌─────────────────────┐         ┌─────────────────────┐
+│  Build vLLM Image   │         │  Build Gateway Image│
+│  (~2 min with cache)│         │  (~1 min with cache)│
+│                     │         │                     │
+│  • Free disk space  │         │  • Free disk space  │
+│  • ECR login        │         │  • ECR login        │
+│  • Docker buildx    │         │  • Docker buildx    │
+│  • Push to ECR      │         │  • Push to ECR      │
+└──────────┬──────────┘         └──────────┬──────────┘
+           │                               │
+           └───────────────┬───────────────┘
+                           ▼
+              ┌─────────────────────────┐
+              │  AWS ECR Repositories   │
+              │                         │
+              │  slm-ft-serving-vllm    │
+              │  slm-ft-serving-gateway │
+              │                         │
+              │  Cache: :buildcache tag │
+              └────────────┬────────────┘
+                           │
+                           ▼
+              ┌─────────────────────────┐
+              │  Manual Deploy via SSM  │
+              │  poetry run python      │
+              │  scripts/deploy.py      │
+              └─────────────────────────┘
+```
 
-**Planned Features**:
-- CloudWatch dashboards for GPU metrics
-- Container log aggregation and analysis
-- API request/response monitoring
-- Cost tracking and alerts
-- Performance metrics (latency, throughput)
-- Error rate monitoring and alerting
+**Build Optimizations**:
+- **Parallel Jobs**: vLLM and Gateway build simultaneously
+- **ECR Registry Cache**: `--cache-from` / `--cache-to` for layer reuse
+- **Disk Cleanup**: Remove unused tools before large builds
+- **Minimal Tags**: Only `:latest` pushed to minimize storage costs
 
----
+### Remote Deployment (SSM)
+
+All EC2 operations execute via AWS Systems Manager - no SSH keys required.
+
+```
+┌──────────────┐     boto3/SSM API     ┌──────────────────────┐
+│  Local Mac   │ ───────────────────▶  │  AWS SSM             │
+│              │                       │                      │
+│  deploy.py   │                       │  Run Command         │
+│  • Start EC2 │                       │  • ECR login         │
+│  • Wait OK   │                       │  • Pull images       │
+│  • Send cmds │                       │  • docker compose up │
+└──────────────┘                       └──────────┬───────────┘
+                                                  │
+                                                  ▼
+                                       ┌──────────────────────┐
+                                       │  EC2 g6.2xlarge      │
+                                       │                      │
+                                       │  SSM Agent           │
+                                       │  ├─ Fetch secrets    │
+                                       │  ├─ Pull from ECR    │
+                                       │  └─ Start containers │
+                                       └──────────────────────┘
+```
+
+**Security Model**:
+- **No SSH**: Instance has no `.pem` key access
+- **Secrets Manager**: HF token stored securely, fetched at runtime
+- **SSM Parameter Store**: Configuration references (instance ID, secret names)
+- **CloudWatch Logs**: All SSM command outputs logged for debugging
 
 ## 🚀 Getting Started
 
