@@ -47,7 +47,7 @@ flowchart TB
     Vercel -->|HTTP proxied| EC2
 ```
 
-> ⚠️ **Note**: This is an experimental project. The EC2 backend server may not be running at all times to save costs (~$1/hour for GPU instance). If the demo is unavailable, the server is likely stopped.
+> ⚠️ **Note**: This is an experimental project. The **frontend is always live** on Vercel, but the **backend EC2 server may not be running** at all times to save costs (~$1/hour for GPU instance). If extraction requests fail, the backend is likely stopped.
 
 ### Component Details
 
