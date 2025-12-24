@@ -74,19 +74,6 @@ The system serves as an AI-powered medical assistant that can parse unstructured
 
 ---
 
-## 🚀 Project Stages
-
-This project follows a **staged development approach** - each stage must be complete before moving to the next:
-
-| Stage | Status | Description | Documentation |
-|-------|--------|-------------|---------------|
-| **1** | ✅ Complete | vLLM server with LoRA adapter on EC2 | [Stage 1 Details](#stage-1-vllm-inference-server) |
-| **2** | ✅ Complete | FastAPI gateway with Docker Compose | [Stage 2 Details](#stage-2-fastapi-gateway) |
-| **3** | ✅ Complete | Next.js frontend on Vercel | [Stage 3 Details](#stage-3-nextjs-frontend) |
-| **4** | 🔮 Planned | CloudWatch monitoring & observability | [Stage 4 Preview](#stage-4-future-monitoring) |
-
----
-
 ## 🧬 The Model
 
 ### Fine-tuning Details
@@ -101,7 +88,7 @@ The model was fine-tuned on synthetic cancer clinical data using **qLoRA (4-bit 
 ```json
 {
   "instruction": "Extract all cancer-related entities from the text.",
-  "input": "70-year-old man with widely metastatic cutaneous melanoma. PD-L1 was 5% on IHC and NGS reported TMB-high. Given multiple symptomatic brain metastases he received combination immunotherapy with nivolumab plus ipilimumab and stereotactic radiosurgery to dominant intracranial lesions. Imaging after two cycles demonstrated some shrinking of index lesions but appearance of a new small lesion — overall assessment called a mixed response.",
+  "input": "70-year-old man with widely metastatic cutaneous melanoma...",
   "output": {
     "cancer_type": "melanoma (cutaneous)",
     "stage": "IV",
@@ -127,6 +114,47 @@ The model extracts **7 structured fields**:
 | `treatment` | Treatments given | nivolumab, chemotherapy, surgery |
 | `response` | Treatment response | complete response, stable disease |
 | `metastasis_site` | Metastasis locations | brain, liver, bone |
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- AWS account with EC2, ECR, SSM, Secrets Manager access
+- GitHub account with Actions enabled
+- Poetry installed locally (`brew install poetry`)
+- AWS CLI configured with credentials
+- HuggingFace account with Llama 3.1 access
+
+### Required Secrets
+
+| Secret | Purpose | Location |
+|--------|---------|----------|
+| `HF_TOKEN` | HuggingFace access token | AWS Secrets Manager |
+| `AWS_ACCESS_KEY_ID` | AWS credentials | GitHub Secrets |
+| `AWS_SECRET_ACCESS_KEY` | AWS credentials | GitHub Secrets |
+
+### Quick Start
+
+```bash
+# Clone and install
+git clone https://github.com/longhoag/slm-ft-serving.git
+cd slm-ft-serving && poetry install
+
+# Deploy to EC2
+poetry run python scripts/deploy.py
+
+# Verify deployment
+curl http://<ec2-ip>:8080/health
+```
+
+### CI/CD Workflow
+
+1. **Push to main** → GitHub Actions triggers
+2. **Parallel builds** → vLLM + Gateway Docker images
+3. **Push to ECR** → Cache-optimized registry
+4. **Manual deploy** → `poetry run python scripts/deploy.py`
 
 ---
 
@@ -157,16 +185,12 @@ The model extracts **7 structured fields**:
 | **Styling** | TailwindCSS v4 |
 | **UI Components** | ShadcnUI (Radix primitives) |
 | **Deployment** | Vercel (serverless) |
-| **State Management** | React Hooks |
-
 
 ---
 
 ## 🔧 Backend Deep Dive
 
 ### vLLM Inference Server
-
-The core inference engine uses [vLLM](https://github.com/vllm-project/vllm) for high-performance LLM serving with optimized GPU utilization.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -190,15 +214,9 @@ The core inference engine uses [vLLM](https://github.com/vllm-project/vllm) for 
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Key Features**:
-- **LoRA Hot-Loading**: Adapter loaded at runtime without modifying base model
-- **Model Persistence**: HuggingFace cache stored in Docker named volume
-- **Health Endpoint**: `/health` returns status for container orchestration
-- **Chat Template**: Custom Jinja template for instruction-following format
+**Key Features**: LoRA hot-loading • Model persistence on EBS • Health endpoint for orchestration • Custom chat template
 
 ### FastAPI Gateway
-
-Lightweight API layer that handles request validation, CORS, and response formatting.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -222,221 +240,83 @@ Lightweight API layer that handles request validation, CORS, and response format
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**API Endpoints**:
-
-```bash
-# Health check
-GET /health
-Response: {"status": "healthy", "vllm_available": true, "version": "0.1.0"}
-
-# Medical extraction
-POST /api/v1/extract
-Content-Type: application/json
-Body: {
-  "text": "Patient diagnosed with stage 3 breast cancer...",
-  "temperature": 0.3,  // optional: 0.0-2.0
-  "max_tokens": 512    // optional: 1-8192
-}
-```
+**Endpoints**: `GET /health` • `GET /docs` (Swagger UI) • `POST /api/v1/extract`
 
 ### Container Orchestration
 
-Docker Compose manages the multi-container deployment with health check dependencies.
-
-```yaml
-# Simplified docker-compose.yml structure
-services:
-  vllm:
-    image: ${ECR_REGISTRY}/slm-ft-serving-vllm:latest
-    ports: ["8000:8000"]
-    volumes: [huggingface-cache:/root/.cache/huggingface]
-    deploy:
-      resources:
-        reservations:
-          devices: [driver: nvidia, count: all, capabilities: [gpu]]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      start_period: 360s  # 6 min for model loading
-
-  gateway:
-    image: ${ECR_REGISTRY}/slm-ft-serving-gateway:latest
-    ports: ["8080:8080"]
-    environment: [VLLM_BASE_URL=http://vllm:8000]
-    depends_on:
-      vllm:
-        condition: service_healthy  # Wait for vLLM ready
-```
-
-**Container Communication**:
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Docker Network (slm-network)             │
+│                  Docker Compose Architecture                │
 │                                                             │
-│   ┌─────────────┐    HTTP (internal)    ┌─────────────┐    │
-│   │   Gateway   │ ──────────────────▶   │    vLLM     │    │
-│   │  :8080      │   vllm:8000           │   :8000     │    │
-│   └──────┬──────┘                       └─────────────┘    │
-│          │                                                  │
-└──────────┼──────────────────────────────────────────────────┘
-           │ External (host network)
-           ▼
-    Client requests to EC2:8080
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │                  Docker Network                      │   │
+│  │                                                      │   │
+│  │   ┌──────────────┐         ┌──────────────┐         │   │
+│  │   │   Gateway    │  HTTP   │    vLLM      │         │   │
+│  │   │   :8080      │────────▶│    :8000     │         │   │
+│  │   │              │         │              │         │   │
+│  │   │  depends_on: │         │  GPU: L4     │         │   │
+│  │   │  vllm:healthy│         │  healthcheck │         │   │
+│  │   └──────────────┘         └──────────────┘         │   │
+│  │                                    │                │   │
+│  └────────────────────────────────────┼────────────────┘   │
+│                                       │                    │
+│  ┌────────────────────────────────────▼────────────────┐   │
+│  │            Named Volume: huggingface-cache          │   │
+│  │            (Persistent model storage on EBS)        │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### CI/CD Pipeline
+**Orchestration**: Health check dependencies • 6-min startup for model loading • GPU reservation • Persistent volumes
 
-GitHub Actions automates Docker image builds with parallel execution and ECR caching.
+### CI/CD Pipeline
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                  GitHub Actions Workflow                    │
-│                  (Triggered on push to main)                │
 └─────────────────────────┬───────────────────────────────────┘
-                          │
+                          │ push to main
           ┌───────────────┴───────────────┐
-          │                               │
           ▼                               ▼
 ┌─────────────────────┐         ┌─────────────────────┐
-│  Build vLLM Image   │         │  Build Gateway Image│
-│  (~2 min with cache)│         │  (~1 min with cache)│
-│                     │         │                     │
-│  • Free disk space  │         │  • Free disk space  │
-│  • ECR login        │         │  • ECR login        │
-│  • Docker buildx    │         │  • Docker buildx    │
-│  • Push to ECR      │         │  • Push to ECR      │
+│  Build vLLM Image   │         │  Build Gateway      │
+│  (parallel)         │         │  (parallel)         │
 └──────────┬──────────┘         └──────────┬──────────┘
            │                               │
            └───────────────┬───────────────┘
                            ▼
               ┌─────────────────────────┐
-              │  AWS ECR Repositories   │
-              │                         │
-              │  slm-ft-serving-vllm    │
-              │  slm-ft-serving-gateway │
-              │                         │
-              │  Cache: :buildcache tag │
+              │     AWS ECR             │
+              │  • slm-ft-serving-vllm  │
+              │  • slm-ft-serving-gate  │
+              │  • :buildcache layer    │
               └────────────┬────────────┘
-                           │
                            ▼
               ┌─────────────────────────┐
-              │  Manual Deploy via SSM  │
-              │  poetry run python      │
-              │  scripts/deploy.py      │
+              │  Manual: deploy.py      │
+              │  (SSM → EC2)            │
               └─────────────────────────┘
 ```
 
-**Build Optimizations**:
-- **Parallel Jobs**: vLLM and Gateway build simultaneously
-- **ECR Registry Cache**: `--cache-from` / `--cache-to` for layer reuse
-- **Disk Cleanup**: Remove unused tools before large builds
-- **Minimal Tags**: Only `:latest` pushed to minimize storage costs
+**Optimizations**: Parallel builds • ECR layer caching • Disk cleanup before builds
 
 ### Remote Deployment (SSM)
 
-All EC2 operations execute via AWS Systems Manager - no SSH keys required.
-
 ```
-┌──────────────┐     boto3/SSM API     ┌──────────────────────┐
-│  Local Mac   │ ───────────────────▶  │  AWS SSM             │
-│              │                       │                      │
-│  deploy.py   │                       │  Run Command         │
-│  • Start EC2 │                       │  • ECR login         │
-│  • Wait OK   │                       │  • Pull images       │
-│  • Send cmds │                       │  • docker compose up │
-└──────────────┘                       └──────────┬───────────┘
-                                                  │
-                                                  ▼
-                                       ┌──────────────────────┐
-                                       │  EC2 g6.2xlarge      │
-                                       │                      │
-                                       │  SSM Agent           │
-                                       │  ├─ Fetch secrets    │
-                                       │  ├─ Pull from ECR    │
-                                       │  └─ Start containers │
-                                       └──────────────────────┘
+┌──────────────┐                    ┌──────────────────────┐
+│  Local Mac   │    AWS SSM API     │  EC2 g6.2xlarge      │
+│              │ ─────────────────▶ │                      │
+│  deploy.py   │    Run Command     │  SSM Agent           │
+│  • Start EC2 │                    │  • Fetch HF token    │
+│  • Wait OK   │                    │  • ECR login         │
+│  • Send cmds │                    │  • Pull images       │
+│              │                    │  • docker compose up │
+└──────────────┘                    └──────────────────────┘
 ```
 
-**Security Model**:
-- **No SSH**: Instance has no `.pem` key access
-- **Secrets Manager**: HF token stored securely, fetched at runtime
-- **SSM Parameter Store**: Configuration references (instance ID, secret names)
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- AWS account with EC2, ECR, SSM, Secrets Manager access
-- GitHub account with Actions enabled
-- Poetry installed locally (`brew install poetry`)
-- AWS CLI configured with credentials
-- HuggingFace account with Llama 3.1 access
-
-### Required Secrets
-
-Store these in **AWS Secrets Manager**:
-
-| Secret | Purpose | Location |
-|--------|---------|----------|
-| `HF_TOKEN` | HuggingFace access token | Secrets Manager |
-| `AWS_ACCESS_KEY_ID` | AWS credentials | GitHub Secrets |
-| `AWS_SECRET_ACCESS_KEY` | AWS credentials | GitHub Secrets |
-
-Reference secrets via **SSM Parameter Store** (no `.env` files).
-
-### Deployment
-
-**1. Initial Setup**
-
-```bash
-# Clone repository
-git clone https://github.com/longhoag/slm-ft-serving.git
-cd slm-ft-serving
-
-# Install dependencies
-poetry install
-
-# Configure AWS credentials
-aws configure
-```
-
-**2. Deploy to EC2**
-
-```bash
-# Start EC2 instance and deploy containers
-poetry run python scripts/deploy.py
-
-# Deploy without starting EC2 (if already running)
-poetry run python scripts/deploy.py --skip-start
-```
-
-**3. Verify Deployment**
-
-```bash
-# Check health
-curl http://<ec2-public-ip>:8080/health
-
-# Test extraction
-curl -X POST http://<ec2-public-ip>:8080/api/v1/extract \
-  -H "Content-Type: application/json" \
-  -d '{"text": "Patient diagnosed with stage 3 breast cancer with HER2 positive marker."}'
-```
-
-### CI/CD Workflow
-
-The GitHub Actions workflow automatically:
-
-1. **Triggers on push** to `main` branch (when backend files change)
-2. **Builds Docker images** (vLLM + Gateway in parallel)
-3. **Pushes to ECR** with cache optimization
-4. **Tracks deployment** in GitHub sidebar
-
-**Manual deployment** to EC2:
-
-```bash
-poetry run python scripts/deploy.py --skip-start
-```
+**Security**: No SSH/`.pem` keys • Secrets from AWS Secrets Manager • SSM Parameter Store for config
 
 ---
 
@@ -482,25 +362,33 @@ poetry run python scripts/deploy.py --skip-start
 ```
 slm-ft-serving/
 ├── .github/
-│   ├── workflows/
-│   │   └── deploy.yml              # CI/CD pipeline
+│   ├── workflows/deploy.yml        # CI/CD pipeline
 │   └── copilot-instructions.md     # AI assistant context
-├── config/
-│   └── deployment.yml              # Deployment configuration
-├── docs/
-│   └── STAGE-3.md                  # Stage 3 documentation
+├── config/deployment.yml           # Deployment configuration
+├── docs/STAGE-3.md                 # Stage 3 documentation
 ├── gateway/
-│   ├── routers/
-│   │   └── extraction.py           # Extraction endpoint
+│   ├── routers/extraction.py       # Extraction endpoint
 │   ├── main.py                     # FastAPI app
 │   └── Dockerfile                  # Gateway Docker image
-├── scripts/
-│   └── deploy.py                   # SSM deployment script
+├── scripts/deploy.py               # SSM deployment script
 ├── Dockerfile                      # vLLM Docker image
 ├── docker-compose.yml              # Container orchestration
 ├── pyproject.toml                  # Poetry dependencies
-└── README.md                       # This file
+└── README.md
 ```
+
+---
+
+## 📋 Project Stages
+
+This project follows a **staged development approach**:
+
+| Stage | Status | Description |
+|-------|--------|-------------|
+| **1** | ✅ Complete | vLLM server with LoRA adapter on EC2 g6.2xlarge |
+| **2** | ✅ Complete | FastAPI gateway with Docker Compose orchestration |
+| **3** | ✅ Complete | Next.js frontend on Vercel |
+| **4** | 🔮 Planned | CloudWatch monitoring & observability |
 
 ---
 
