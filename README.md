@@ -200,7 +200,11 @@ flowchart TB
     end
 ```
 
-**Key Features**: LoRA hot-loading • Model persistence on EBS • Health endpoint for orchestration • Custom chat template
+**Key Features**:
+- LoRA hot-loading
+- Model persistence on EBS
+- Health endpoint for orchestration
+- Custom chat template
 
 ### FastAPI Gateway
 
@@ -229,7 +233,10 @@ flowchart TB
     end
 ```
 
-**Endpoints**: `GET /health` • `GET /docs` (Swagger UI) • `POST /api/v1/extract`
+**Endpoints**:
+- `GET /health` - Health check
+- `GET /docs` - Swagger UI
+- `POST /api/v1/extract` - Main extraction endpoint
 
 ### Container Orchestration
 
@@ -249,7 +256,11 @@ flowchart TB
     Client["External Client"] -->|Port 8080| GW
 ```
 
-**Orchestration**: Health check dependencies • 6-min startup for model loading • GPU reservation • Persistent volumes
+**Orchestration**:
+- Health check dependencies
+- 6-min startup for model loading
+- GPU reservation
+- Persistent volumes
 
 ### CI/CD Pipeline
 
@@ -266,7 +277,10 @@ flowchart TB
     ECR --> Deploy["Manual: deploy.py<br/>(SSM → EC2)"]
 ```
 
-**Optimizations**: Parallel builds • ECR layer caching • Disk cleanup before builds
+**Optimizations**:
+- Parallel builds
+- ECR layer caching
+- Disk cleanup before builds
 
 ### Remote Deployment (SSM)
 
@@ -287,7 +301,10 @@ flowchart LR
     Local -->|"AWS SSM API"| SSM
 ```
 
-**Security**: No SSH/`.pem` keys • Secrets from AWS Secrets Manager • SSM Parameter Store for config
+**Security**:
+- No SSH/`.pem` keys
+- Secrets from AWS Secrets Manager
+- SSM Parameter Store for config
 
 ---
 
