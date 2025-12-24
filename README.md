@@ -1,6 +1,6 @@
 # Medical Information Extraction - Backend Server
 
-> **Backend infrastructure for AI-powered medical cancer information extraction using fine-tuned Llama 3.1 8B**
+> **Production backend serving fine-tuned Llama 3.1 8B model for cancer-specific entity extraction (IE) via vLLM on AWS EC2**
 
 [![Live Demo](https://img.shields.io/badge/Demo-Live-brightgreen)](https://medical-extraction.vercel.app)
 [![GitHub Actions](https://img.shields.io/badge/CI/CD-GitHub%20Actions-2088FF?logo=github-actions&logoColor=white)](https://github.com/longhoag/slm-ft-serving/actions)
@@ -13,7 +13,7 @@
 
 This repository contains the **backend infrastructure** for a medical information extraction system that uses a **fine-tuned Llama 3.1 8B model** (qLoRA 4-bit quantization) to extract structured cancer-related entities from clinical text.
 
-The system serves as an AI-powered medical assistant that can parse unstructured clinical notes and return structured data including cancer type, stage, gene mutations, biomarkers, treatments, responses, and metastasis sites.
+The system performs cancer-specific named entity recognition (NER) and information extraction (IE) on unstructured clinical notes, returning structured data across 7 medical fields: cancer type, stage, gene mutations, biomarkers, treatments, treatment responses, and metastasis sites.
 
 **🌐 Live Application**: [https://medical-extraction.vercel.app](https://medical-extraction.vercel.app)
 
