@@ -360,7 +360,8 @@ All EC2 operations execute via AWS Systems Manager - no SSH keys required.
 - **No SSH**: Instance has no `.pem` key access
 - **Secrets Manager**: HF token stored securely, fetched at runtime
 - **SSM Parameter Store**: Configuration references (instance ID, secret names)
-- **CloudWatch Logs**: All SSM command outputs logged for debugging
+
+---
 
 ## 🚀 Getting Started
 
@@ -368,7 +369,7 @@ All EC2 operations execute via AWS Systems Manager - no SSH keys required.
 
 - AWS account with EC2, ECR, SSM, Secrets Manager access
 - GitHub account with Actions enabled
-- Poetry installed locally (\`brew install poetry\`)
+- Poetry installed locally (`brew install poetry`)
 - AWS CLI configured with credentials
 - HuggingFace account with Llama 3.1 access
 
@@ -378,17 +379,17 @@ Store these in **AWS Secrets Manager**:
 
 | Secret | Purpose | Location |
 |--------|---------|----------|
-| \`HF_TOKEN\` | HuggingFace access token | Secrets Manager |
-| \`AWS_ACCESS_KEY_ID\` | AWS credentials | GitHub Secrets |
-| \`AWS_SECRET_ACCESS_KEY\` | AWS credentials | GitHub Secrets |
+| `HF_TOKEN` | HuggingFace access token | Secrets Manager |
+| `AWS_ACCESS_KEY_ID` | AWS credentials | GitHub Secrets |
+| `AWS_SECRET_ACCESS_KEY` | AWS credentials | GitHub Secrets |
 
-Reference secrets via **SSM Parameter Store** (no \`.env\` files).
+Reference secrets via **SSM Parameter Store** (no `.env` files).
 
 ### Deployment
 
-#### 1. Initial Setup
+**1. Initial Setup**
 
-\`\`\`bash
+```bash
 # Clone repository
 git clone https://github.com/longhoag/slm-ft-serving.git
 cd slm-ft-serving
@@ -398,45 +399,44 @@ poetry install
 
 # Configure AWS credentials
 aws configure
-\`\`\`
+```
 
-#### 2. Deploy to EC2
+**2. Deploy to EC2**
 
-\`\`\`bash
+```bash
 # Start EC2 instance and deploy containers
 poetry run python scripts/deploy.py
 
 # Deploy without starting EC2 (if already running)
 poetry run python scripts/deploy.py --skip-start
-\`\`\`
+```
 
-#### 3. Verify Deployment
+**3. Verify Deployment**
 
-\`\`\`bash
+```bash
 # Check health
 curl http://<ec2-public-ip>:8080/health
 
 # Test extraction
-curl -X POST http://<ec2-public-ip>:8080/api/v1/extract \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "text": "Patient diagnosed with stage 3 breast cancer with HER2 positive marker."
-  }'
-\`\`\`
+curl -X POST http://<ec2-public-ip>:8080/api/v1/extract \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Patient diagnosed with stage 3 breast cancer with HER2 positive marker."}'
+```
 
 ### CI/CD Workflow
 
 The GitHub Actions workflow automatically:
 
-1. **Triggers on push** to \`main\` branch (when backend files change)
+1. **Triggers on push** to `main` branch (when backend files change)
 2. **Builds Docker images** (vLLM + Gateway in parallel)
 3. **Pushes to ECR** with cache optimization
 4. **Tracks deployment** in GitHub sidebar
 
 **Manual deployment** to EC2:
-\`\`\`bash
+
+```bash
 poetry run python scripts/deploy.py --skip-start
-\`\`\`
+```
 
 ---
 
@@ -444,33 +444,25 @@ poetry run python scripts/deploy.py --skip-start
 
 ### Backend Features
 
-✅ **High-Performance Inference** - vLLM optimizations for fast LLM serving  
-✅ **GPU Acceleration** - NVIDIA L4 GPU for efficient inference  
-✅ **LoRA Adapter Support** - Load fine-tuned adapters without full model retraining  
-✅ **Model Caching** - Persistent storage on EBS (survives container restarts)  
-✅ **Health Checks** - Automated container health monitoring  
-✅ **Input Validation** - Pydantic models for request/response validation  
-✅ **CORS Security** - Restricted to Vercel domains  
-✅ **API Documentation** - Interactive Swagger UI at \`/docs\`  
-✅ **Structured Output** - 7 medical fields in JSON format  
-✅ **Error Handling** - Proper HTTP status codes and error messages
+- ✅ **High-Performance Inference** - vLLM optimizations for fast LLM serving
+- ✅ **GPU Acceleration** - NVIDIA L4 GPU for efficient inference
+- ✅ **LoRA Adapter Support** - Load fine-tuned adapters without full model retraining
+- ✅ **Model Caching** - Persistent storage on EBS (survives container restarts)
+- ✅ **Health Checks** - Automated container health monitoring
+- ✅ **Input Validation** - Pydantic models for request/response validation
+- ✅ **CORS Security** - Restricted to Vercel domains
+- ✅ **API Documentation** - Interactive Swagger UI at `/docs`
+- ✅ **Structured Output** - 7 medical fields in JSON format
+- ✅ **Error Handling** - Proper HTTP status codes and error messages
 
 ### Frontend Features ([View Frontend Repo](https://github.com/longhoag/slm-ft-serving-frontend))
 
-✨ **Real-time Extraction** - Extract medical entities in 2-3 seconds  
-🔒 **Secure Architecture** - EC2 backend IP hidden via server-side proxy  
-📱 **Responsive Design** - Works seamlessly on mobile and desktop  
-🎯 **Type-safe** - Full TypeScript coverage with strict mode  
-⚡ **Fast & Modern** - Built with Next.js 16 and TailwindCSS v4  
-🔄 **Auto-deploy** - Push to main → live on Vercel instantly
-
----
-
-## 📖 Documentation
-
-- **[STAGE-3.md](docs/STAGE-3.md)** - Stage 3 backend changes and CORS configuration
-- **[Copilot Instructions](.github/copilot-instructions.md)** - AI assistant context and guidelines
-- **[Frontend Repository](https://github.com/longhoag/slm-ft-serving-frontend)** - Frontend codebase and documentation
+- ✨ **Real-time Extraction** - Extract medical entities in 2-3 seconds
+- 🔒 **Secure Architecture** - EC2 backend IP hidden via server-side proxy
+- 📱 **Responsive Design** - Works seamlessly on mobile and desktop
+- 🎯 **Type-safe** - Full TypeScript coverage with strict mode
+- ⚡ **Fast & Modern** - Built with Next.js 16 and TailwindCSS v4
+- 🔄 **Auto-deploy** - Push to main → live on Vercel instantly
 
 ---
 
@@ -478,16 +470,16 @@ poetry run python scripts/deploy.py --skip-start
 
 ### Design Principles
 
-- **SSM-only access**: No SSH, no \`.pem\` keys for EC2 access
-- **Secrets Manager**: All secrets stored securely, never in \`.env\` files
-- **Poetry for Python**: No raw \`pip install\` commands
-- **Loguru for logging**: No \`print()\` statements in production code
+- **SSM-only access**: No SSH, no `.pem` keys for EC2 access
+- **Secrets Manager**: All secrets stored securely, never in `.env` files
+- **Poetry for Python**: No raw `pip install` commands
+- **Loguru for logging**: No `print()` statements in production code
 - **Staged development**: Complete each stage before moving forward
 - **Fail-safe execution**: Commands execute with error handling and retries
 
 ### Project Structure
 
-\`\`\`
+```
 slm-ft-serving/
 ├── .github/
 │   ├── workflows/
@@ -508,7 +500,7 @@ slm-ft-serving/
 ├── docker-compose.yml              # Container orchestration
 ├── pyproject.toml                  # Poetry dependencies
 └── README.md                       # This file
-\`\`\`
+```
 
 ---
 
