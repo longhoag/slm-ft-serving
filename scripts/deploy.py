@@ -216,6 +216,12 @@ def deploy_compose_stack_via_ssm(
         "export HOME=${HOME:-/root}",
         "cd $HOME",
         "",
+        "# Disable pagers to prevent interactive prompts in SSM",
+        "export PAGER=cat",
+        "export AWS_PAGER=\"\"",
+        "export GIT_PAGER=cat",
+        "export SYSTEMD_PAGER=cat",
+        "",
         "echo '=== Docker Volume Setup ==='",
         f"docker volume create {volume_name} || true",
         f"echo 'Volume {volume_name} ready'",
@@ -255,8 +261,9 @@ def deploy_compose_stack_via_ssm(
         f"docker login --username AWS --password-stdin {config.ecr_registry} 2>&1 | grep -v 'WARNING'",
         "",
         "echo '=== Pulling Docker Images ==='",
-        f"docker pull {config.ecr_registry}/{config.ecr_vllm_repository}:{image_tag}",
-        f"docker pull {config.ecr_registry}/{config.ecr_gateway_repository}:{image_tag}",
+        f"docker pull --quiet {config.ecr_registry}/{config.ecr_vllm_repository}:{image_tag}",
+        f"docker pull --quiet {config.ecr_registry}/{config.ecr_gateway_repository}:{image_tag}",
+        "echo 'Images pulled successfully'",
         "",
         "echo '=== Writing docker-compose.yml ==='",
         f"echo '{compose_content_b64}' | base64 -d > docker-compose.yml",
@@ -356,6 +363,10 @@ def validate_deployment(config: DeploymentConfig) -> bool:
     
     # Set HOME explicitly for SSM shell environment
     export HOME=${{HOME:-/root}}
+    
+    # Disable pagers to prevent interactive prompts in SSM
+    export PAGER=cat
+    export AWS_PAGER=""
     
     echo "=== Checking Docker Compose Stack ==="
     cd $HOME
