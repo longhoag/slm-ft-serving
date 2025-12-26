@@ -253,6 +253,13 @@ def deploy_compose_stack_via_ssm(
             "docker stop vllm-server 2>/dev/null || echo 'No Stage 1 vllm-server running'",
             "docker rm vllm-server 2>/dev/null || echo 'No Stage 1 vllm-server to remove'",
             "",
+            "echo '=== Cleaning Up Unused Docker Resources ==='",
+            "# Remove old images, stopped containers, and unused networks",
+            "# Keep volumes to preserve model cache (huggingface-cache)",
+            "docker system prune -af --filter 'until=24h' 2>&1 || echo 'Cleanup completed'",
+            "echo 'Disk space after cleanup:'",
+            "df -h / | grep -E 'Filesystem|/dev/root'",
+            "",
         ])
     
     commands.extend([
